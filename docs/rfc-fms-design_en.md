@@ -76,7 +76,7 @@ It should first prove that:
 ### 4.1 Retained Decisions
 
 * **Monorepo**: yes
-* **Web**: TanStack Start + TanStack Router + TanStack Query, TypeScript
+* **Web**: TanStack Start + TanStack Router + signal-kernel / async-runtime, TypeScript
 * **Mobile**: React Native, latest stable version, TypeScript
 * **Database**: PostgreSQL
 * **GPS message transport**: MQTT
@@ -145,13 +145,14 @@ Therefore:
 
 ### 4.7 Web Runtime Principles
 
-TanStack Start is responsible only for the web app shell, routing, auth guards, data fetching, and UI rendering.
+TanStack Start is responsible only for the web app shell, routing, auth guards, and UI rendering.
 
 During the MVP phase:
 
 * FastAPI is the only business backend
 * the web client calls FastAPI through HTTP and does not connect directly to PostgreSQL or MQTT
-* the web client uses TanStack Query for latest location polling
+* the web client uses `signal-kernel / async-runtime` to manage latest location polling, cancellation, stale / fresh / error state, and refresh lifecycle
+* TanStack Query is a valid alternative for production team standardization, but it is not the primary runtime for this MVP
 * TanStack Start Server Components are not required for the first version
 * TanStack Start server functions must not handle core business mutations
 * sensitive values such as JWT secrets and MQTT credentials must not be placed in the web runtime
@@ -160,6 +161,7 @@ Reasons:
 
 * reduce coupling between the web framework and the core business pipeline
 * prevent web runtime changes from affecting GPS ingestion and query interfaces
+* use the monitoring page as a real-world surface for `signal-kernel / async-runtime`, demonstrating async lifecycle, polling, cancellation, and stale state control
 * avoid the Next.js App Router / RSC attack surface without turning TanStack Start into a second backend
 
 ---
@@ -280,7 +282,9 @@ Notes:
 
 * since mobile uploads every 10 seconds, 5-second web polling is enough to demonstrate a real-time feel
 * WebSocket / SSE are not required in the first version
-* after Redis is introduced later, the system can evolve toward higher-frequency push updates
+* if WebSocket / SSE are introduced later, they should first act as invalidation signals, not as the client-side state truth source
+* future push events should trigger HTTP snapshot refetches to avoid state drift from missed events, reconnects, or event ordering issues
+* after Redis is introduced later, the system can evolve toward higher-frequency push updates or an invalidation bridge
 
 ---
 
@@ -443,7 +447,7 @@ flowchart TD
 * provide the logged-in monitoring UI
 * periodically fetch latest locations from the backend
 * use TanStack Router for routing
-* use TanStack Query for 5-second polling and client cache
+* use `signal-kernel / async-runtime` for 5-second polling, request cancellation, stale / fresh / error state, and refresh lifecycle
 
 ### 10.4 Redis
 
@@ -719,7 +723,7 @@ The mobile app must support `.env` configuration for:
 
 ### 16.1 Required
 
-* TanStack Start + TanStack Router + TanStack Query + TypeScript
+* TanStack Start + TanStack Router + signal-kernel / async-runtime + TypeScript
 * login page
 * monitoring home page
 * vehicle list
@@ -736,6 +740,7 @@ The mobile app must support `.env` configuration for:
 * real-time push
 * TanStack Start Server Components
 * business mutations handled by the web runtime
+* TanStack Query as the primary polling runtime
 
 ---
 
@@ -835,7 +840,8 @@ Build the minimal monitoring platform.
 * access token storage
 * protected monitoring route
 * minimal FastAPI client
-* 5-second TanStack Query polling of `/vehicles/latest-locations`
+* 5-second `signal-kernel / async-runtime` polling of `/vehicles/latest-locations`
+* request cancellation, stale / fresh / error state, and manual refresh lifecycle
 * show online / offline status
 * allow viewing one vehicle's latest location and time
 

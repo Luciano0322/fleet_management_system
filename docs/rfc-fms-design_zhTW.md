@@ -76,7 +76,7 @@
 ### 4.1 保留決策
 
 * **Monorepo**：是
-* **Web**：TanStack Start + TanStack Router + TanStack Query（TypeScript）
+* **Web**：TanStack Start + TanStack Router + signal-kernel / async-runtime（TypeScript）
 * **Mobile**：React Native（最新穩定版，TypeScript）
 * **Database**：PostgreSQL
 * **GPS 訊息傳輸**：MQTT
@@ -145,13 +145,14 @@ React Native 手機 App **不要求**放進 docker-compose 內執行。
 
 ### 4.7 Web Runtime 原則
 
-TanStack Start 只負責 Web app shell、routing、auth guard、data fetching 與 UI rendering。
+TanStack Start 只負責 Web app shell、routing、auth guard 與 UI rendering。
 
 MVP 階段需遵守：
 
 * FastAPI 是唯一業務 backend
 * Web 端透過 HTTP 呼叫 FastAPI，不直接連 PostgreSQL 或 MQTT
-* Web 端使用 TanStack Query 進行 latest location polling
+* Web 端使用 `signal-kernel / async-runtime` 管理 latest location polling、cancellation、stale / fresh / error state 與 refresh lifecycle
+* TanStack Query 是 production team standardization 的合理替代方案，但不是本 MVP 主方案
 * 不使用 TanStack Start Server Components 作為第一版必要能力
 * 不使用 TanStack Start server functions 承擔核心業務 mutation
 * JWT secret、MQTT credential 等敏感資訊不得放進 web runtime
@@ -160,6 +161,7 @@ MVP 階段需遵守：
 
 * 降低 Web framework 對核心業務鏈路的耦合
 * 避免因 Web runtime 變動而影響 GPS ingestion 與查詢 API
+* 讓監控頁成為 `signal-kernel / async-runtime` 的實際展示面，展示 async lifecycle、polling、cancellation 與 stale state 控制
 * 避開 Next.js App Router / RSC 相關攻擊面，同時不把 TanStack Start 當作第二個 backend
 
 ---
@@ -280,7 +282,9 @@ Mosquitto]
 
 * 由於 mobile 每 10 秒上拋一次，Web 先用 5 秒輪詢已足以展示即時感
 * WebSocket / SSE 不列入第一版必做範圍
-* 後續若導入 Redis，可再升級為更高頻推播
+* WebSocket / SSE 若未來導入，應優先作為 invalidation signal，而不是 client-side state truth source
+* 未來推播事件只應觸發 HTTP snapshot refetch，避免 event stream 漏接、重連或順序錯亂造成 state drift
+* 後續若導入 Redis，可再升級為更高頻推播或 invalidation bridge
 
 ---
 
@@ -443,7 +447,7 @@ flowchart TD
 * 提供登入後監控頁面
 * 定時向 backend 取最新定位
 * 使用 TanStack Router 管理路由
-* 使用 TanStack Query 管理 5 秒 polling 與 client cache
+* 使用 `signal-kernel / async-runtime` 管理 5 秒 polling、request cancellation、stale / fresh / error state 與 refresh lifecycle
 
 ### 10.4 Redis
 
@@ -719,7 +723,7 @@ Mobile app 需能透過 `.env` 指定：
 
 ### 16.1 必做
 
-* TanStack Start + TanStack Router + TanStack Query + TypeScript
+* TanStack Start + TanStack Router + signal-kernel / async-runtime + TypeScript
 * 登入頁
 * 監控主頁
 * 車輛列表
@@ -736,6 +740,7 @@ Mobile app 需能透過 `.env` 指定：
 * 即時推播
 * TanStack Start Server Components
 * 由 Web runtime 承擔業務 mutation
+* TanStack Query 作為主 polling runtime
 
 ---
 
@@ -835,7 +840,8 @@ Mobile app 需能透過 `.env` 指定：
 * access token 保存
 * protected monitoring route
 * FastAPI minimal client
-* TanStack Query 5 秒輪詢 `/vehicles/latest-locations`
+* `signal-kernel / async-runtime` 5 秒輪詢 `/vehicles/latest-locations`
+* request cancellation、stale / fresh / error state 與 manual refresh lifecycle
 * 顯示 online / offline 狀態
 * 可查看單車最近位置與時間
 
