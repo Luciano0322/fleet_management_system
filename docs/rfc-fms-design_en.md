@@ -740,7 +740,10 @@ The mobile app must support `.env` configuration for:
 * real-time push
 * TanStack Start Server Components
 * business mutations handled by the web runtime
-* TanStack Query as the primary polling runtime
+
+### 16.3 Acceptable Alternative
+
+TanStack Query is a reasonable choice for server state and polling in typical team products. If future team standardization requires it, the project may revisit TanStack Query. For this MVP, the primary approach intentionally uses `signal-kernel / async-runtime` so the monitoring page can demonstrate explicit control over async lifecycle, polling, cancellation, stale / fresh / error state, and future push-to-refetch behavior.
 
 ---
 

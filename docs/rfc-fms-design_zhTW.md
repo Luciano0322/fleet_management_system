@@ -740,7 +740,10 @@ Mobile app 需能透過 `.env` 指定：
 * 即時推播
 * TanStack Start Server Components
 * 由 Web runtime 承擔業務 mutation
-* TanStack Query 作為主 polling runtime
+
+### 16.3 可接受替代方案
+
+TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理選擇。若未來團隊標準化需要，可評估改用 TanStack Query；但本 MVP 主方案刻意使用 `signal-kernel / async-runtime`，讓監控頁展示 async lifecycle、polling、cancellation、stale / fresh / error state 與未來 push-to-refetch 的底層控制能力。
 
 ---
 
