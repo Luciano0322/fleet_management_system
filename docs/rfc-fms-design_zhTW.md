@@ -76,7 +76,7 @@
 ### 4.1 保留決策
 
 * **Monorepo**：是
-* **Web**：Next.js
+* **Web**：TanStack Start + TanStack Router + TanStack Query（TypeScript）
 * **Mobile**：React Native（最新穩定版，TypeScript）
 * **Database**：PostgreSQL
 * **GPS 訊息傳輸**：MQTT
@@ -85,6 +85,7 @@
 ### 4.2 調整決策
 
 * **Backend**：由 NestJS 改為 **Python FastAPI**
+* **Web**：由 Next.js 改為 **TanStack Start**
 
 ### 4.3 Backend 建議實作細節
 
@@ -124,7 +125,7 @@ MVP 階段允許 backend 在同一個 FastAPI process 內同時承擔：
 以下服務必須能透過 `docker-compose` 啟動：
 
 * backend（FastAPI）
-* web（Next.js）
+* web（TanStack Start）
 * postgres
 * mqtt broker（Mosquitto）
 
@@ -141,6 +142,25 @@ React Native 手機 App **不要求**放進 docker-compose 內執行。
 
 * 平台端（backend / web / db / mqtt）以 docker-compose 管理
 * mobile app 保持本機啟動，但必須能對接 compose 啟動後的 backend / mqtt 環境
+
+### 4.7 Web Runtime 原則
+
+TanStack Start 只負責 Web app shell、routing、auth guard、data fetching 與 UI rendering。
+
+MVP 階段需遵守：
+
+* FastAPI 是唯一業務 backend
+* Web 端透過 HTTP 呼叫 FastAPI，不直接連 PostgreSQL 或 MQTT
+* Web 端使用 TanStack Query 進行 latest location polling
+* 不使用 TanStack Start Server Components 作為第一版必要能力
+* 不使用 TanStack Start server functions 承擔核心業務 mutation
+* JWT secret、MQTT credential 等敏感資訊不得放進 web runtime
+
+理由：
+
+* 降低 Web framework 對核心業務鏈路的耦合
+* 避免因 Web runtime 變動而影響 GPS ingestion 與查詢 API
+* 避開 Next.js App Router / RSC 相關攻擊面，同時不把 TanStack Start 當作第二個 backend
 
 ---
 
@@ -232,7 +252,7 @@ Mosquitto]
 
     C -->|Subscribe GPS Topic| B
     B --> D[(PostgreSQL)]
-    E[Next.js Web] -->|HTTP API| B
+    E[TanStack Start Web] -->|HTTP API| B
 
     subgraph Compose Services
       B
@@ -272,7 +292,7 @@ sequenceDiagram
     participant Broker as MQTT Broker
     participant API as FastAPI Backend
     participant DB as PostgreSQL
-    participant Web as Next.js Web
+    participant Web as TanStack Start Web
 
     Mobile->>API: POST /auth/login
     API-->>Mobile: access token
@@ -306,7 +326,7 @@ flowchart TD
     apps --> backend[apps/backend
 FastAPI]
     apps --> web[apps/web
-Next.js]
+TanStack Start]
     apps --> mobile[apps/mobile
 React Native]
 
@@ -331,9 +351,11 @@ repo-root/
       Dockerfile
       pyproject.toml
     web/
-      app/
-      components/
-      lib/
+      src/
+      src/routes/
+      src/components/
+      src/lib/
+      vite.config.ts
       Dockerfile
       package.json
     mobile/
@@ -389,7 +411,7 @@ flowchart TD
     compose[docker-compose] --> postgres[(postgres)]
     compose --> mqtt[mosquitto]
     compose --> backend[fastapi]
-    compose --> web[nextjs]
+    compose --> web[tanstack-start]
 
     backend --> postgres
     backend --> mqtt
@@ -420,6 +442,8 @@ flowchart TD
 
 * 提供登入後監控頁面
 * 定時向 backend 取最新定位
+* 使用 TanStack Router 管理路由
+* 使用 TanStack Query 管理 5 秒 polling 與 client cache
 
 ### 10.4 Redis
 
@@ -695,13 +719,14 @@ Mobile app 需能透過 `.env` 指定：
 
 ### 16.1 必做
 
-* Next.js + TypeScript
+* TanStack Start + TanStack Router + TanStack Query + TypeScript
 * 登入頁
 * 監控主頁
 * 車輛列表
 * 最新位置資訊
 * 在線 / 離線顯示
 * 5 秒輪詢最新定位 API
+* 受保護的監控路由，未登入使用者需導回登入頁
 
 ### 16.2 可延後
 
@@ -709,6 +734,8 @@ Mobile app 需能透過 `.env` 指定：
 * WebSocket
 * SSE
 * 即時推播
+* TanStack Start Server Components
+* 由 Web runtime 承擔業務 mutation
 
 ---
 
@@ -794,7 +821,7 @@ Mobile app 需能透過 `.env` 指定：
 
 ---
 
-### Phase 3：Next.js Monitoring Web
+### Phase 3：TanStack Start Monitoring Web
 
 #### 目標
 
@@ -802,10 +829,13 @@ Mobile app 需能透過 `.env` 指定：
 
 #### 任務
 
+* TanStack Start app scaffold
+* TanStack Router route setup
 * 登入頁
 * access token 保存
-* 監控列表頁
-* 5 秒輪詢 `/vehicles/latest-locations`
+* protected monitoring route
+* FastAPI minimal client
+* TanStack Query 5 秒輪詢 `/vehicles/latest-locations`
 * 顯示 online / offline 狀態
 * 可查看單車最近位置與時間
 
@@ -813,6 +843,7 @@ Mobile app 需能透過 `.env` 指定：
 
 * 可登入 web
 * 能看到位置資料隨輪詢刷新
+* 未登入使用者不可進入監控頁
 
 ---
 
@@ -899,9 +930,10 @@ agent 在實作時，需遵守以下限制：
 4. **不要把 mobile app 容器化當作必要工作**
 5. **不要一開始導入 Redis**
 6. **不要為了理想架構而延誤核心鏈路落地**
+7. **不要把 TanStack Start server functions 當作核心業務 backend**
 
 ---
 
 ## 21. 一句話摘要
 
-> 先用 FastAPI + Next.js + React Native + PostgreSQL + MQTT，透過 docker-compose 建立平台側開發環境，完成一套每 10 秒上拋 GPS、可在 Web 端即時監控位置的通用型定位平台 MVP，再保留未來導入 Redis 與高頻定位優化的演進空間。
+> 先用 FastAPI + TanStack Start + React Native + PostgreSQL + MQTT，透過 docker-compose 建立平台側開發環境，完成一套每 10 秒上拋 GPS、可在 Web 端即時監控位置的通用型定位平台 MVP，再保留未來導入 Redis 與高頻定位優化的演進空間。
