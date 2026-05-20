@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-fms}
+      POSTGRES_USER: ${POSTGRES_USER:-fms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fms_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fms} -d ${POSTGRES_DB:-fms}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    environment:
+      MQTT_USERNAME: ${MQTT_USERNAME:-fms_demo}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-fms_demo_password}
+    command: >
+      sh -c "mosquitto_passwd -b -c /tmp/mosquitto.passwd \"$${MQTT_USERNAME}\" \"$${MQTT_PASSWORD}\"
+      && chown mosquitto:mosquitto /tmp/mosquitto.passwd
+      && chmod 0600 /tmp/mosquitto.passwd
+      && exec mosquitto -c /mosquitto/config/mosquitto.conf"
+    ports:
+      - "${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./infra/docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
+  backend:
+    build:
+      context: ./apps/backend
+    environment:
+      BACKEND_HOST: ${BACKEND_HOST:-0.0.0.0}
+      BACKEND_PORT: 8000
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://fms:fms_password@postgres:5432/fms}
+      MQTT_HOST: ${MQTT_HOST:-mqtt}
+      MQTT_PORT: 1883
+      MQTT_USERNAME: ${MQTT_USERNAME:-fms_demo}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-fms_demo_password}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mqtt:
+        condition: service_started
+
+  web:
+    build:
+      context: ./apps/web
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

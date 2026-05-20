@@ -14,6 +14,11 @@ dist-ssr
 out
 *.tsbuildinfo
 *.local
+.env
+.env.*
+!.env.example
+.venv
+venv
 
 # Editor directories and files
 .vscode/*
