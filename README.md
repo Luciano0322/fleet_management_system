@@ -46,6 +46,26 @@ password: fms_demo_password
 
 These values are only for local development and demo usage.
 
+## Phase 1 Backend Setup
+
+After the compose services are running, initialize the backend schema and seed data:
+
+```sh
+docker compose exec backend alembic upgrade head
+docker compose exec backend python -m app.seed
+```
+
+Seed web/API accounts all use `password123`:
+
+```text
+admin001
+operator001
+driver001
+```
+
+The seed relationship is `operator001 -> driver001`, with one active vehicle
+`ABC-1234` and device binding `demo-device-001`.
+
 ## Useful Commands
 
 ```sh
@@ -53,6 +73,7 @@ docker compose ps
 docker compose logs -f backend
 docker compose logs -f web
 docker compose logs -f mqtt
+docker compose exec backend pytest
 docker compose down
 ```
 
