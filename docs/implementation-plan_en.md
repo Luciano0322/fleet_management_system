@@ -14,6 +14,8 @@ This plan follows the RFC's vertical tracer bullet rule:
 * each phase must add one demonstrable capability
 * each phase must include verification steps
 * FastAPI remains the only business backend
+* JWT auth controls both identity and visibility scope
+* basic `user_relationships` define which driver users an operator can monitor
 * TanStack Start is used for the web shell, routing, auth guard, and UI rendering only
 * `signal-kernel / async-runtime` manages web monitoring polling, cancellation, stale / fresh / error state, and refresh lifecycle
 * TanStack Query is a valid production-standard alternative, but it is not the primary polling runtime for this MVP
@@ -101,32 +103,43 @@ Build the backend spine: database schema, migrations, seed data, authentication,
   * `users`
   * `vehicles`
   * `device_bindings`
+  * `user_relationships`
   * `gps_latest`
   * `gps_history`
 * Add indexes:
   * `gps_history(vehicle_id, recorded_at desc)`
   * `device_bindings(user_id, vehicle_id, device_identifier, status)`
+  * `user_relationships(parent_user_id, child_user_id, status)`
 * Add seed data:
   * one admin
   * one operator
   * one driver
+  * one active `operator -> driver` monitoring relationship
   * one active vehicle
   * one active device binding for the driver and vehicle
 * Implement password hashing.
 * Implement JWT access token login through `POST /auth/login`.
 * Implement authenticated current-user dependency.
+* Implement visibility scope resolution:
+  * admin can see all active users and vehicles
+  * operator can see assigned driver users through active `user_relationships`
+  * driver can see only self and own device binding
 * Implement:
+  * `GET /users`
   * `GET /vehicles`
   * `GET /vehicles/latest-locations`
   * `GET /vehicles/{vehicle_id}/history`
   * `GET /me/device-binding`
-* Add backend tests for auth, seed visibility, empty latest-location query, and protected-route behavior.
+* Add backend tests for auth, seed visibility, relationship-scoped queries, empty latest-location query, and protected-route behavior.
 
 ### Acceptance Criteria
 
 * Alembic migrations can create the schema from an empty database.
 * Seed users can log in.
 * Login returns a JWT access token and basic user payload.
+* Admin can see all seed users.
+* Operator can see only driver users assigned through active relationships.
+* Driver can see only self through `GET /users`.
 * `GET /me/device-binding` returns the seed driver's active binding.
 * `GET /vehicles/latest-locations` returns an empty or null-location result before GPS data exists.
 * FastAPI OpenAPI docs are available at `/docs`.
@@ -137,6 +150,7 @@ Build the backend spine: database schema, migrations, seed data, authentication,
 * Run migrations against the compose Postgres service.
 * Log in with seed credentials through `curl` or API docs.
 * Query protected vehicle endpoints with and without a token.
+* Query `/users` and `/vehicles/latest-locations` as admin, operator, and driver to confirm visibility scope.
 
 ### Do Not Do Yet
 
@@ -166,6 +180,7 @@ Turn MQTT GPS payloads into durable database state.
   * speed nullable and `>= 0`
   * heading nullable and `0..360`
 * Reject messages where topic `vehicle_id` does not match payload `vehicle_id`.
+* Reject messages where payload `user_id` does not map to an active registered driver.
 * Reject messages where `user_id + vehicle_id + device_identifier` does not map to an active `device_bindings` row.
 * In one transaction:
   * insert `gps_history`
@@ -182,6 +197,7 @@ Turn MQTT GPS payloads into durable database state.
 * Publishing a valid MQTT message updates `device_bindings.last_seen_at`.
 * `GET /vehicles/latest-locations` returns the new location.
 * Topic / payload vehicle mismatch is rejected without DB writes.
+* Unknown, inactive, or non-driver payload user is rejected without DB writes.
 * Missing or inactive device binding is rejected without DB writes.
 * Invalid coordinate values are rejected without DB writes.
 
@@ -217,11 +233,13 @@ Build the web monitoring experience on top of FastAPI HTTP interfaces.
 * Wire `signal-kernel / async-runtime` into the monitoring route.
 * Build a minimal FastAPI client for:
   * `POST /auth/login`
+  * `GET /users`
   * `GET /vehicles`
   * `GET /vehicles/latest-locations`
 * Store access token in a simple MVP-safe client-side mechanism.
 * Add auth guard that redirects unauthenticated users to login.
 * Build monitoring page:
+  * visible registered users
   * vehicle list
   * latest latitude / longitude
   * latest recorded time
@@ -236,6 +254,7 @@ Build the web monitoring experience on top of FastAPI HTTP interfaces.
 
 * User can log in through the web app.
 * Unauthenticated users cannot access the monitoring route.
+* Operators see only registered users, vehicles, and latest locations inside their visibility scope.
 * Monitoring page shows vehicles from FastAPI.
 * Latest locations refresh every 5 seconds.
 * Online / offline status follows the 30-second rule from backend data.

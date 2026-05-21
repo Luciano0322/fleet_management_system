@@ -175,6 +175,7 @@ Required:
 * account login
 * JWT access token
 * basic role field
+* data queries are restricted by user role and visibility scope after login
 
 Initial roles:
 
@@ -190,6 +191,20 @@ Required:
 * a driver can be bound to a vehicle
 * one mobile app instance is treated as one uploading device
 * vehicles and users have a basic relationship model
+* admin / operator monitoring users can monitor drivers through a basic user relationship
+* the web client can only see registered users, vehicles, and location data within the current JWT user's visibility scope
+
+### 5.2.1 User Relationship / Visibility Scope
+
+The MVP must preserve a basic user ownership / visibility relationship, but it does not implement a full multi-tenant commercial model.
+
+Definitions:
+
+* `admin`: can monitor all active users, vehicles, device bindings, and GPS data
+* `operator`: can monitor only driver users assigned through active relationships
+* `driver`: can view only self and own device binding; GPS upload must also use the driver's own active binding
+
+This scope is called **visibility scope**. All web monitoring interfaces must filter data by the current JWT user's visibility scope.
 
 ### 5.3 GPS Ingestion
 
@@ -504,7 +519,26 @@ MVP constraints:
 * one `user_id + vehicle_id + device_identifier` can have only one active binding
 * the first version assumes that a vehicle has only one active mobile upload device at a time; if dual-device redundancy is needed later, a separate RFC must revise online status and conflict handling
 
-### 11.4 gps_latest
+### 11.4 user_relationships
+
+| field             | type        | note                         |
+| ----------------- | ----------- | ---------------------------- |
+| id                | uuid        | PK                           |
+| parent_user_id    | uuid        | FK users.id, monitoring user |
+| child_user_id     | uuid        | FK users.id, monitored driver |
+| relationship_type | varchar     | monitors                     |
+| status            | varchar     | active/inactive              |
+| created_at        | timestamptz |                              |
+| updated_at        | timestamptz |                              |
+
+MVP constraints:
+
+* `parent_user_id` must be an `admin` or `operator`
+* `child_user_id` must be a `driver`
+* one `parent_user_id + child_user_id + relationship_type` can have only one active relationship
+* this is not a full tenant model; it only defines the web monitoring visibility scope
+
+### 11.5 gps_latest
 
 | field       | type             | note                  |
 | ----------- | ---------------- | --------------------- |
@@ -516,7 +550,7 @@ MVP constraints:
 | recorded_at | timestamptz      | device timestamp      |
 | updated_at  | timestamptz      | server timestamp      |
 
-### 11.5 gps_history
+### 11.6 gps_history
 
 | field       | type             | note                  |
 | ----------- | ---------------- | --------------------- |
@@ -535,6 +569,7 @@ MVP indexes:
 * `gps_history(vehicle_id, recorded_at desc)`: supports per-vehicle route history queries
 * `gps_latest(vehicle_id)`: provided by the primary key
 * `device_bindings(user_id, vehicle_id, device_identifier, status)`: supports MQTT payload validation
+* `user_relationships(parent_user_id, child_user_id, status)`: supports web monitoring visibility scope queries
 
 ---
 
@@ -573,11 +608,11 @@ Response:
 
 #### `GET /vehicles`
 
-Purpose: fetch the vehicle list.
+Purpose: fetch the vehicle list within the current JWT user's visibility scope.
 
 #### `GET /vehicles/latest-locations`
 
-Purpose: fetch latest locations for all vehicles, used by the web monitoring page.
+Purpose: fetch latest vehicle locations within the current JWT user's visibility scope, used by the web monitoring page.
 
 Response example:
 
@@ -586,7 +621,9 @@ Response example:
   {
     "vehicle_id": "uuid",
     "plate_number": "ABC-1234",
-    "status": "online",
+    "driver_user_id": "uuid",
+    "driver_account": "driver001",
+    "online_status": "online",
     "latitude": 25.033,
     "longitude": 121.5654,
     "recorded_at": "2026-05-19T10:00:00Z"
@@ -596,15 +633,52 @@ Response example:
 
 #### `GET /vehicles/{vehicle_id}/history?from=...&to=...`
 
-Purpose: fetch the historical route for one vehicle.
+Purpose: fetch the historical route for one vehicle within the current JWT user's visibility scope.
 
 ---
 
-### 12.3 Device Binding
+### 12.3 Users
+
+#### `GET /users`
+
+Purpose: fetch registered users within the current JWT user's visibility scope.
+
+MVP rules:
+
+* `admin` can see all active users
+* `operator` can see driver users assigned through active relationships
+* `driver` can see only self
+
+---
+
+### 12.4 Device Binding
 
 #### `GET /me/device-binding`
 
 Purpose: allow the mobile app to fetch the currently bound vehicle.
+
+### 12.5 Visibility Scope Rules
+
+All monitoring queries must derive visibility scope from the JWT current user:
+
+```text
+admin
+  -> all active driver users
+  -> their active device_bindings
+  -> vehicles
+  -> gps_latest / gps_history
+
+operator
+  -> active user_relationships where parent_user_id = current_user.id
+  -> child driver users
+  -> their active device_bindings
+  -> vehicles
+  -> gps_latest / gps_history
+
+driver
+  -> self
+  -> own active device_bindings
+```
 
 ---
 
@@ -647,11 +721,12 @@ The backend must:
 2. parse `vehicle_id` from the topic
 3. validate required payload fields
 4. verify that the topic `vehicle_id` equals the payload `vehicle_id`
-5. verify that `user_id + vehicle_id + device_identifier` maps to an active `device_bindings` record
-6. validate latitude, longitude, speed, and heading ranges
-7. write to `gps_history`
-8. upsert `gps_latest`
-9. update `device_bindings.last_seen_at`
+5. verify that payload `user_id` maps to an active registered user with role `driver`
+6. verify that `user_id + vehicle_id + device_identifier` maps to an active `device_bindings` record
+7. validate latitude, longitude, speed, and heading ranges
+8. write to `gps_history`
+9. upsert `gps_latest`
+10. update `device_bindings.last_seen_at`
 
 ### 13.4 MQTT Auth MVP Principles
 
@@ -726,6 +801,7 @@ The mobile app must support `.env` configuration for:
 * TanStack Start + TanStack Router + signal-kernel / async-runtime + TypeScript
 * login page
 * monitoring home page
+* registered users within the current visibility scope
 * vehicle list
 * latest location information
 * online / offline display
@@ -788,9 +864,10 @@ Complete the backend foundation for login, queries, and migrations.
 * SQLAlchemy models
 * Alembic migration
 * JWT auth
-* users / vehicles seed data
+* users / vehicles / user_relationships seed data
 * device binding seed data
 * `/auth/login`
+* `/users`
 * `/vehicles`
 * `/vehicles/latest-locations`
 * `/vehicles/{vehicle_id}/history`
@@ -800,6 +877,8 @@ Complete the backend foundation for login, queries, and migrations.
 * API docs are available at `/docs`
 * DB migration can run
 * login returns a token
+* operator can see only driver users assigned through relationships
+* admin can see all seed users
 * querying latest locations returns an empty result when there is no GPS data
 * the seed driver can fetch their active device binding
 
@@ -816,6 +895,7 @@ Connect GPS messages from backend ingestion to database writes.
 * start MQTT broker
 * backend subscribes to `gps/+`
 * validate consistency across topic / payload / active device binding
+* verify that payload user is an active registered driver
 * insert `gps_history`
 * upsert `gps_latest`
 * update `device_bindings.last_seen_at`
@@ -825,6 +905,7 @@ Connect GPS messages from backend ingestion to database writes.
 * after manually publishing an MQTT test message, latest location and history data are visible in DB
 * `GET /vehicles/latest-locations` returns data
 * if topic and payload vehicle IDs do not match, the message is rejected and nothing is written to DB
+* if payload user is not an active driver, the message is rejected and nothing is written to DB
 * if device binding does not exist or is inactive, the message is rejected and nothing is written to DB
 
 ---
@@ -843,6 +924,7 @@ Build the minimal monitoring platform.
 * access token storage
 * protected monitoring route
 * minimal FastAPI client
+* show registered users within the current visibility scope
 * 5-second `signal-kernel / async-runtime` polling of `/vehicles/latest-locations`
 * request cancellation, stale / fresh / error state, and manual refresh lifecycle
 * show online / offline status
@@ -851,6 +933,7 @@ Build the minimal monitoring platform.
 #### Acceptance Criteria
 
 * user can log in through the web
+* operator can see only users / vehicles / latest locations within their visibility scope
 * location data refreshes through polling
 * unauthenticated users cannot enter the monitoring page
 

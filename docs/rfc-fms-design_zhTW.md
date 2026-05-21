@@ -175,6 +175,7 @@ MVP 階段需遵守：
 * 帳號登入
 * JWT access token
 * 基本角色欄位
+* 登入後依照使用者角色與可見範圍限制資料查詢
 
 角色先定義為：
 
@@ -190,6 +191,20 @@ MVP 階段需遵守：
 * Driver 可綁定車輛
 * 一支 mobile app 視為一個裝置上拋端
 * 車輛與使用者為基本關聯模型
+* admin / operator 這類 monitoring user 可透過基礎從屬關係監控 driver
+* Web 端只能看到目前 JWT 使用者可見範圍內的註冊使用者、車輛與定位資料
+
+### 5.2.1 User Relationship / Visibility Scope
+
+本 MVP 需要保有基礎用戶從屬關係，但不實作完整多租戶商業模型。
+
+定義：
+
+* `admin`：可監控所有 active users、vehicles、device bindings 與 GPS data
+* `operator`：只能監控透過 active relationship 指派給自己的 driver users
+* `driver`：只能查看自己與自己的 device binding；GPS 上拋也只能使用自己的 active binding
+
+這個範圍稱為 **visibility scope**。所有 Web monitoring API 必須依目前 JWT user 的 visibility scope 過濾資料。
 
 ### 5.3 GPS Ingestion
 
@@ -504,7 +519,26 @@ MVP 約束：
 * 同一個 `user_id + vehicle_id + device_identifier` 只能有一筆 active binding
 * 第一版預設一台車同時間只有一個 active mobile 上拋端；若未來需要雙機備援，需另開 RFC 調整 online 判斷與衝突處理
 
-### 11.4 gps_latest
+### 11.4 user_relationships
+
+| field             | type        | note                              |
+| ----------------- | ----------- | --------------------------------- |
+| id                | uuid        | PK                                |
+| parent_user_id    | uuid        | FK users.id, monitoring user      |
+| child_user_id     | uuid        | FK users.id, monitored driver     |
+| relationship_type | varchar     | monitors                          |
+| status            | varchar     | active/inactive                   |
+| created_at        | timestamptz |                                   |
+| updated_at        | timestamptz |                                   |
+
+MVP 約束：
+
+* `parent_user_id` 必須是 `admin` 或 `operator`
+* `child_user_id` 必須是 `driver`
+* 同一組 `parent_user_id + child_user_id + relationship_type` 只能有一筆 active relationship
+* 這不是完整 tenant model；它只用來定義 Web monitoring 的 visibility scope
+
+### 11.5 gps_latest
 
 | field       | type             | note                  |
 | ----------- | ---------------- | --------------------- |
@@ -516,7 +550,7 @@ MVP 約束：
 | recorded_at | timestamptz      | device timestamp      |
 | updated_at  | timestamptz      | server timestamp      |
 
-### 11.5 gps_history
+### 11.6 gps_history
 
 | field       | type             | note                  |
 | ----------- | ---------------- | --------------------- |
@@ -535,6 +569,7 @@ MVP 索引：
 * `gps_history(vehicle_id, recorded_at desc)`：支援單車歷史軌跡查詢
 * `gps_latest(vehicle_id)`：由 primary key 提供
 * `device_bindings(user_id, vehicle_id, device_identifier, status)`：支援 MQTT payload 驗證
+* `user_relationships(parent_user_id, child_user_id, status)`：支援 Web monitoring visibility scope 查詢
 
 ---
 
@@ -573,11 +608,11 @@ Response:
 
 #### `GET /vehicles`
 
-用途：取得車輛列表
+用途：取得目前 JWT user 可見範圍內的車輛列表。
 
 #### `GET /vehicles/latest-locations`
 
-用途：取得所有車輛最新位置，供 Web 監控頁使用
+用途：取得目前 JWT user 可見範圍內的車輛最新位置，供 Web 監控頁使用。
 
 Response example:
 
@@ -586,7 +621,9 @@ Response example:
   {
     "vehicle_id": "uuid",
     "plate_number": "ABC-1234",
-    "status": "online",
+    "driver_user_id": "uuid",
+    "driver_account": "driver001",
+    "online_status": "online",
     "latitude": 25.033,
     "longitude": 121.5654,
     "recorded_at": "2026-05-19T10:00:00Z"
@@ -596,15 +633,52 @@ Response example:
 
 #### `GET /vehicles/{vehicle_id}/history?from=...&to=...`
 
-用途：取得車輛歷史軌跡
+用途：取得目前 JWT user 可見範圍內單一車輛的歷史軌跡。
 
 ---
 
-### 12.3 Device Binding
+### 12.3 Users
+
+#### `GET /users`
+
+用途：取得目前 JWT user 可見範圍內的註冊使用者。
+
+MVP 規則：
+
+* `admin` 可看到所有 active users
+* `operator` 可看到 active relationship 指派給自己的 driver users
+* `driver` 只能看到自己
+
+---
+
+### 12.4 Device Binding
 
 #### `GET /me/device-binding`
 
 用途：mobile app 取得目前綁定車輛資訊
+
+### 12.5 Visibility Scope 規則
+
+所有 monitoring 查詢都必須從 JWT current user 推導 visibility scope：
+
+```text
+admin
+  -> all active driver users
+  -> their active device_bindings
+  -> vehicles
+  -> gps_latest / gps_history
+
+operator
+  -> active user_relationships where parent_user_id = current_user.id
+  -> child driver users
+  -> their active device_bindings
+  -> vehicles
+  -> gps_latest / gps_history
+
+driver
+  -> self
+  -> own active device_bindings
+```
 
 ---
 
@@ -647,11 +721,12 @@ Backend 必須：
 2. 從 topic 解析 `vehicle_id`
 3. 驗證 payload 基本欄位
 4. 驗證 topic 的 `vehicle_id` 必須等於 payload 的 `vehicle_id`
-5. 驗證 `user_id + vehicle_id + device_identifier` 對應 active `device_bindings`
-6. 驗證經緯度、速度、方向角範圍
-7. 寫入 `gps_history`
-8. upsert `gps_latest`
-9. 更新 `device_bindings.last_seen_at`
+5. 驗證 payload `user_id` 對應 active registered user，且 role 必須是 `driver`
+6. 驗證 `user_id + vehicle_id + device_identifier` 對應 active `device_bindings`
+7. 驗證經緯度、速度、方向角範圍
+8. 寫入 `gps_history`
+9. upsert `gps_latest`
+10. 更新 `device_bindings.last_seen_at`
 
 ### 13.4 MQTT Auth MVP 原則
 
@@ -726,6 +801,7 @@ Mobile app 需能透過 `.env` 指定：
 * TanStack Start + TanStack Router + signal-kernel / async-runtime + TypeScript
 * 登入頁
 * 監控主頁
+* 顯示目前可見範圍內的註冊使用者
 * 車輛列表
 * 最新位置資訊
 * 在線 / 離線顯示
@@ -788,9 +864,10 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * SQLAlchemy models
 * Alembic migration
 * JWT auth
-* users / vehicles seed data
+* users / vehicles / user_relationships seed data
 * device binding seed data
 * `/auth/login`
+* `/users`
 * `/vehicles`
 * `/vehicles/latest-locations`
 * `/vehicles/{vehicle_id}/history`
@@ -800,6 +877,8 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * API 文件可在 `/docs` 檢視
 * DB migration 可執行
 * 可登入並取得 token
+* operator 只能查到 relationship 指派給自己的 driver users
+* admin 可查到所有 seed users
 * 可查詢空的最新定位結果
 * seed driver 可查到自己的 active device binding
 
@@ -816,6 +895,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * 啟動 MQTT broker
 * backend 訂閱 `gps/+`
 * 驗證 topic / payload / active device binding 一致性
+* 驗證 payload user 是 active registered driver
 * insert `gps_history`
 * upsert `gps_latest`
 * 更新 `device_bindings.last_seen_at`
@@ -825,6 +905,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * 手動 publish MQTT 測試訊息後，DB 中可看到最新位置與歷史資料
 * `GET /vehicles/latest-locations` 可回傳資料
 * topic 與 payload 車輛不一致時，message 會被拒絕且不寫入 DB
+* payload user 不是 active driver 時，message 會被拒絕且不寫入 DB
 * device binding 不存在或 inactive 時，message 會被拒絕且不寫入 DB
 
 ---
@@ -843,6 +924,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * access token 保存
 * protected monitoring route
 * FastAPI minimal client
+* 顯示目前可見範圍內的註冊 users
 * `signal-kernel / async-runtime` 5 秒輪詢 `/vehicles/latest-locations`
 * request cancellation、stale / fresh / error state 與 manual refresh lifecycle
 * 顯示 online / offline 狀態
@@ -851,6 +933,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 #### 驗收標準
 
 * 可登入 web
+* operator 只能看到 visibility scope 內的 users / vehicles / latest locations
 * 能看到位置資料隨輪詢刷新
 * 未登入使用者不可進入監控頁
 
