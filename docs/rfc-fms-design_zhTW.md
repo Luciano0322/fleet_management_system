@@ -474,6 +474,25 @@ flowchart TD
 * batch write buffer
 * traffic smoothing
 
+若未來為了高流量 GPS ingestion 導入 Redis，Redis 應放在 MQTT ingestion 與
+PostgreSQL 寫入之間：
+
+```text
+MQTT broker
+  -> backend MQTT subscriber
+  -> Redis Stream / queue
+  -> ingestion worker
+  -> PostgreSQL
+```
+
+Redis 應被視為 buffer / stream，而不是自行負責業務排程或 DB 寫入的元件。
+系統仍需要獨立 ingestion worker 消費 GPS events，驗證 active driver 與 active
+device binding，執行 batch / coalesced writes，寫入 PostgreSQL，並且只在 DB
+transaction 成功後 ack message。
+
+MVP 階段 backend 可在 validation 後直接寫入 PostgreSQL。Redis worker path
+保留給 post-MVP evolution gate，等 load test 顯示直寫 DB 不足時再導入。
+
 ---
 
 ## 11. 資料模型
@@ -1007,6 +1026,24 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * write buffer
 * batch flush queue
 * future pub/sub bridge
+
+在 ingestion scaling 場景中，Redis 應放在 DB persistence 之前，而不是之後。
+預期演進路徑為：
+
+```text
+MQTT subscriber
+  -> lightweight topic / JSON validation
+  -> Redis Stream append
+  -> ingestion worker consumer group
+  -> active user / binding validation
+  -> batch insert `gps_history`
+  -> coalesced upsert `gps_latest`
+  -> update `device_bindings.last_seen_at`
+  -> acknowledge Redis message after DB commit
+```
+
+worker 負責 retry、batching、dead-letter handling 與 write coalescing。Redis
+負責 buffering、backpressure 與 pending-message tracking；Redis 不取代 worker。
 
 但第一版 agent **不得主動加入 Redis 實作**，除非完成 MVP 後另行開 RFC。
 

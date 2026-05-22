@@ -474,6 +474,27 @@ However, the architecture and README should preserve a future path for:
 * batch write buffer
 * traffic smoothing
 
+If Redis is introduced later for high-volume GPS ingestion, it should sit
+between MQTT ingestion and PostgreSQL writes:
+
+```text
+MQTT broker
+  -> backend MQTT subscriber
+  -> Redis Stream / queue
+  -> ingestion worker
+  -> PostgreSQL
+```
+
+Redis should be treated as a buffer / stream, not as the component that performs
+business scheduling or database writes by itself. A separate ingestion worker is
+required to consume queued GPS events, validate active driver and active device
+binding state, batch or coalesce writes, commit to PostgreSQL, and acknowledge
+messages only after the database transaction succeeds.
+
+For the MVP, the backend may write directly to PostgreSQL after validation. The
+Redis worker path is reserved for the post-MVP evolution gate when load testing
+shows that direct writes are no longer sufficient.
+
 ---
 
 ## 11. Data Model
@@ -1007,6 +1028,25 @@ If vehicle count and upload frequency increase later, Redis is expected to be in
 * write buffer
 * batch flush queue
 * future pub/sub bridge
+
+For ingestion scaling, Redis should be placed before database persistence, not
+after it. The intended evolution is:
+
+```text
+MQTT subscriber
+  -> lightweight topic / JSON validation
+  -> Redis Stream append
+  -> ingestion worker consumer group
+  -> active user / binding validation
+  -> batch insert `gps_history`
+  -> coalesced upsert `gps_latest`
+  -> update `device_bindings.last_seen_at`
+  -> acknowledge Redis message after DB commit
+```
+
+The worker owns retry, batching, dead-letter handling, and write coalescing.
+Redis provides buffering, backpressure, and pending-message tracking; it does
+not replace the worker.
 
 However, the first-version agent **must not proactively implement Redis** unless the MVP is complete and a separate RFC is opened.
 

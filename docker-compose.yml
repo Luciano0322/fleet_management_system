@@ -39,10 +39,12 @@ services:
       BACKEND_PORT: 8000
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://fms:fms_password@postgres:5432/fms}
       JWT_SECRET: ${JWT_SECRET:-phase-1-development-secret-change-me-32-bytes}
+      MQTT_INGESTION_ENABLED: ${MQTT_INGESTION_ENABLED:-true}
       MQTT_HOST: ${MQTT_HOST:-mqtt}
       MQTT_PORT: 1883
       MQTT_USERNAME: ${MQTT_USERNAME:-fms_demo}
       MQTT_PASSWORD: ${MQTT_PASSWORD:-fms_demo_password}
+      MQTT_TOPIC_FILTER: ${MQTT_TOPIC_FILTER:-gps/+}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     depends_on:

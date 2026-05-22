@@ -216,6 +216,25 @@ Turn MQTT GPS payloads into durable database state.
 * Do not add broker ACL synchronization.
 * Do not split ingestion into a separate worker unless single-process ingestion blocks the MVP.
 
+### Reserved Redis Evolution Path
+
+Phase 2 should keep the direct-write MVP simple, but the code boundary should
+not prevent a later Redis worker topology:
+
+```text
+MQTT subscriber
+  -> Redis Stream / queue
+  -> ingestion worker
+  -> PostgreSQL
+```
+
+Redis would sit before database writes and act as a buffer, backpressure layer,
+and pending-message tracker. It would not perform scheduling or persistence by
+itself. A worker would still be required to consume messages, validate active
+driver and active device binding state, batch insert `gps_history`, coalesce
+`gps_latest` upserts, update `device_bindings.last_seen_at`, and ack Redis
+messages only after the DB commit succeeds.
+
 ---
 
 ## 6. Phase 3: TanStack Start Monitoring Web
@@ -393,7 +412,8 @@ Make an explicit decision after the MVP is working, instead of adding future arc
 ### Candidate Follow-Ups
 
 * Redis latest-location cache.
-* Redis write buffer and batch flush queue.
+* Redis Stream / queue before PostgreSQL writes.
+* Ingestion worker consumer group for retry, batching, dead-letter handling, and DB commit / ack coordination.
 * WebSocket or SSE invalidation signals that trigger HTTP snapshot refetch.
 * OpenAPI-generated TypeScript clients.
 * Per-device MQTT credentials or broker ACL synchronization.
@@ -408,6 +428,8 @@ Consider these only after Phase 5 is complete:
 * number of vehicles in target demos
 * acceptable location latency
 * observed Postgres write pressure
+* number of pending or retried GPS messages during load tests
+* whether direct DB transactions from the MQTT subscriber create unacceptable backpressure
 * mobile battery behavior
 * operational need for live invalidation instead of polling
 * security requirements for production MQTT access

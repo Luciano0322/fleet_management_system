@@ -66,6 +66,32 @@ driver001
 The seed relationship is `operator001 -> driver001`, with one active vehicle
 `ABC-1234` and device binding `demo-device-001`.
 
+## Phase 2 GPS Ingestion Demo
+
+The backend subscribes to MQTT topic `gps/+` in compose and validates each GPS
+message against the registered driver, vehicle, and active device binding.
+
+Publish one demo GPS message:
+
+```sh
+sh infra/scripts/publish-demo-gps.sh
+```
+
+Then log in as the operator and query the latest location:
+
+```sh
+TOKEN=$(curl -s -X POST http://localhost:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"account":"operator001","password":"password123"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
+
+curl -s http://localhost:8000/vehicles/latest-locations \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+The seed vehicle should report the published latitude / longitude and become
+`online` for 30 seconds after ingestion.
+
 ## Useful Commands
 
 ```sh
@@ -73,7 +99,7 @@ docker compose ps
 docker compose logs -f backend
 docker compose logs -f web
 docker compose logs -f mqtt
-docker compose exec backend pytest
+docker compose exec -e MQTT_INGESTION_ENABLED=false backend pytest
 docker compose down
 ```
 
