@@ -39,6 +39,29 @@ class User(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="active")
 
 
+class AuthRefreshToken(Base, TimestampMixin):
+    __tablename__ = "auth_refresh_tokens"
+    __table_args__ = (
+        Index("ix_auth_refresh_tokens_user_active", "user_id", "revoked_at", "expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    refresh_token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    replaced_by_token_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("auth_refresh_tokens.id"),
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()
+
+
 class Vehicle(Base, TimestampMixin):
     __tablename__ = "vehicles"
 

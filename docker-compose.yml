@@ -39,6 +39,8 @@ services:
       BACKEND_PORT: 8000
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://fms:fms_password@postgres:5432/fms}
       JWT_SECRET: ${JWT_SECRET:-phase-1-development-secret-change-me-32-bytes}
+      ACCESS_TOKEN_MINUTES: ${ACCESS_TOKEN_MINUTES:-15}
+      REFRESH_TOKEN_DAYS: ${REFRESH_TOKEN_DAYS:-30}
       MQTT_INGESTION_ENABLED: ${MQTT_INGESTION_ENABLED:-true}
       MQTT_HOST: ${MQTT_HOST:-mqtt}
       MQTT_PORT: 1883

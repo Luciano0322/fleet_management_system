@@ -66,6 +66,12 @@ driver001
 The seed relationship is `operator001 -> driver001`, with one active vehicle
 `ABC-1234` and device binding `demo-device-001`.
 
+Auth returns an access / refresh token pair:
+
+- `POST /auth/login` issues `access_token` and `refresh_token`.
+- `POST /auth/refresh` rotates a valid refresh token and returns a new pair.
+- `POST /auth/logout` revokes the submitted refresh token.
+
 ## Phase 2 GPS Ingestion Demo
 
 The backend subscribes to MQTT topic `gps/+` in compose and validates each GPS

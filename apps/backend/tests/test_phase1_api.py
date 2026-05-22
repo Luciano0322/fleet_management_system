@@ -63,6 +63,7 @@ def test_login_returns_jwt_and_user_payload(client: TestClient) -> None:
     payload = response.json()
     assert payload["token_type"] == "bearer"
     assert payload["access_token"]
+    assert payload["refresh_token"]
     assert payload["user"]["account"] == "operator001"
     assert payload["user"]["role"] == "operator"
 
@@ -80,6 +81,79 @@ def test_protected_routes_require_token(client: TestClient) -> None:
     response = client.get("/users")
 
     assert response.status_code == 401
+
+
+def test_refresh_token_rotates_and_new_access_token_works(client: TestClient) -> None:
+    login_response = client.post(
+        "/auth/login",
+        json={"account": "operator001", "password": SEED_PASSWORD},
+    )
+    assert login_response.status_code == 200
+    login_payload = login_response.json()
+
+    refresh_response = client.post(
+        "/auth/refresh",
+        json={"refresh_token": login_payload["refresh_token"]},
+    )
+
+    assert refresh_response.status_code == 200
+    refresh_payload = refresh_response.json()
+    assert refresh_payload["access_token"]
+    assert refresh_payload["refresh_token"]
+    assert refresh_payload["refresh_token"] != login_payload["refresh_token"]
+    assert refresh_payload["user"]["account"] == "operator001"
+
+    reuse_response = client.post(
+        "/auth/refresh",
+        json={"refresh_token": login_payload["refresh_token"]},
+    )
+    assert reuse_response.status_code == 401
+
+    users_response = client.get(
+        "/users",
+        headers={"Authorization": f"Bearer {refresh_payload['access_token']}"},
+    )
+    assert users_response.status_code == 200
+    assert [user["account"] for user in users_response.json()] == ["driver001"]
+
+
+def test_refresh_token_cannot_be_used_as_access_token(client: TestClient) -> None:
+    login_response = client.post(
+        "/auth/login",
+        json={"account": "operator001", "password": SEED_PASSWORD},
+    )
+    assert login_response.status_code == 200
+
+    response = client.get(
+        "/users",
+        headers={
+            "Authorization": f"Bearer {login_response.json()['refresh_token']}",
+        },
+    )
+
+    assert response.status_code == 401
+
+
+def test_logout_revokes_refresh_token(client: TestClient) -> None:
+    login_response = client.post(
+        "/auth/login",
+        json={"account": "operator001", "password": SEED_PASSWORD},
+    )
+    assert login_response.status_code == 200
+    refresh_token = login_response.json()["refresh_token"]
+
+    logout_response = client.post(
+        "/auth/logout",
+        json={"refresh_token": refresh_token},
+    )
+    refresh_response = client.post(
+        "/auth/refresh",
+        json={"refresh_token": refresh_token},
+    )
+
+    assert logout_response.status_code == 200
+    assert logout_response.json() == {"status": "ok"}
+    assert refresh_response.status_code == 401
 
 
 def test_user_visibility_scope(client: TestClient) -> None:

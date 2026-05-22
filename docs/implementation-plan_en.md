@@ -118,7 +118,10 @@ Build the backend spine: database schema, migrations, seed data, authentication,
   * one active vehicle
   * one active device binding for the driver and vehicle
 * Implement password hashing.
-* Implement JWT access token login through `POST /auth/login`.
+* Implement JWT access token and opaque refresh token login through `POST /auth/login`.
+* Store only refresh token hashes in the database.
+* Implement refresh token rotation through `POST /auth/refresh`.
+* Implement refresh token revocation through `POST /auth/logout`.
 * Implement authenticated current-user dependency.
 * Implement visibility scope resolution:
   * admin can see all active users and vehicles
@@ -136,7 +139,9 @@ Build the backend spine: database schema, migrations, seed data, authentication,
 
 * Alembic migrations can create the schema from an empty database.
 * Seed users can log in.
-* Login returns a JWT access token and basic user payload.
+* Login returns a JWT access token, opaque refresh token, and basic user payload.
+* Refresh returns a rotated access / refresh token pair.
+* A rotated or logged-out refresh token cannot be reused.
 * Admin can see all seed users.
 * Operator can see only driver users assigned through active relationships.
 * Driver can see only self through `GET /users`.
@@ -252,10 +257,12 @@ Build the web monitoring experience on top of FastAPI HTTP interfaces.
 * Wire `signal-kernel / async-runtime` into the monitoring route.
 * Build a minimal FastAPI client for:
   * `POST /auth/login`
+  * `POST /auth/refresh`
+  * `POST /auth/logout`
   * `GET /users`
   * `GET /vehicles`
   * `GET /vehicles/latest-locations`
-* Store access token in a simple MVP-safe client-side mechanism.
+* Store and refresh the access / refresh token pair in a simple MVP-safe client-side mechanism.
 * Add auth guard that redirects unauthenticated users to login.
 * Build monitoring page:
   * visible registered users

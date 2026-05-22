@@ -20,7 +20,8 @@ class Settings:
         "phase-1-development-secret-change-me-32-bytes",
     )
     jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
-    access_token_minutes: int = int(os.getenv("ACCESS_TOKEN_MINUTES", "1440"))
+    access_token_minutes: int = int(os.getenv("ACCESS_TOKEN_MINUTES", "15"))
+    refresh_token_days: int = int(os.getenv("REFRESH_TOKEN_DAYS", "30"))
     mqtt_ingestion_enabled: bool = bool_from_env("MQTT_INGESTION_ENABLED", False)
     mqtt_host: str = os.getenv("MQTT_HOST", "localhost")
     mqtt_port: int = int(os.getenv("MQTT_PORT", "1883"))

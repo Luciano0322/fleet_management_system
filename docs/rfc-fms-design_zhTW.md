@@ -173,7 +173,10 @@ MVP 階段需遵守：
 必做：
 
 * 帳號登入
-* JWT access token
+* 短效 JWT access token
+* opaque refresh token，server 端只保存 hash
+* 透過 `POST /auth/refresh` 做 refresh token rotation
+* 透過 `POST /auth/logout` revoke refresh token
 * 基本角色欄位
 * 登入後依照使用者角色與可見範圍限制資料查詢
 
@@ -314,7 +317,7 @@ sequenceDiagram
     participant Web as TanStack Start Web
 
     Mobile->>API: POST /auth/login
-    API-->>Mobile: access token
+    API-->>Mobile: access token + refresh token
 
     loop every 10 seconds
         Mobile->>Broker: publish gps payload
@@ -509,6 +512,28 @@ MVP 階段 backend 可在 validation 後直接寫入 PostgreSQL。Redis worker p
 | created_at    | timestamptz |                       |
 | updated_at    | timestamptz |                       |
 
+### 11.1.1 auth_refresh_tokens
+
+| field                | type        | note                                  |
+| -------------------- | ----------- | ------------------------------------- |
+| id                   | uuid        | PK                                    |
+| user_id              | uuid        | FK users.id                           |
+| refresh_token_hash   | varchar     | SHA-256 hash，不保存 raw token        |
+| expires_at           | timestamptz | refresh session 到期時間              |
+| revoked_at           | timestamptz | nullable；logout 或 rotation 時寫入   |
+| replaced_by_token_id | uuid        | nullable；指向 rotation 後的新 token  |
+| last_used_at         | timestamptz | nullable                              |
+| created_at           | timestamptz |                                       |
+| updated_at           | timestamptz |                                       |
+
+MVP 規則：
+
+* access token 是 JWT bearer token，用於 API authorization
+* refresh token 是 opaque random token，不得被當作 bearer access token 使用
+* refresh token 只保存 hash
+* refresh 採 rotation：舊 refresh token 會被 revoke，並簽發新的 refresh token
+* logout 會 revoke 目前 refresh token session
+
 ### 11.2 vehicles
 
 | field        | type        | note            |
@@ -612,12 +637,60 @@ Response:
 ```json
 {
   "access_token": "jwt-token",
+  "refresh_token": "opaque-refresh-token",
   "token_type": "bearer",
   "user": {
     "id": "uuid",
     "account": "driver001",
     "role": "driver"
   }
+}
+```
+
+#### `POST /auth/refresh`
+
+用途：rotate 有效 refresh token，並簽發新的 access / refresh token pair。
+
+Request:
+
+```json
+{
+  "refresh_token": "opaque-refresh-token"
+}
+```
+
+Response:
+
+```json
+{
+  "access_token": "new-jwt-token",
+  "refresh_token": "new-opaque-refresh-token",
+  "token_type": "bearer",
+  "user": {
+    "id": "uuid",
+    "account": "driver001",
+    "role": "driver"
+  }
+}
+```
+
+#### `POST /auth/logout`
+
+用途：revoke 目前 refresh token session。
+
+Request:
+
+```json
+{
+  "refresh_token": "opaque-refresh-token"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok"
 }
 ```
 

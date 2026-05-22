@@ -173,7 +173,10 @@ Reasons:
 Required:
 
 * account login
-* JWT access token
+* short-lived JWT access token
+* opaque refresh token with server-side hash storage
+* refresh token rotation through `POST /auth/refresh`
+* refresh token revocation through `POST /auth/logout`
 * basic role field
 * data queries are restricted by user role and visibility scope after login
 
@@ -314,7 +317,7 @@ sequenceDiagram
     participant Web as TanStack Start Web
 
     Mobile->>API: POST /auth/login
-    API-->>Mobile: access token
+    API-->>Mobile: access token + refresh token
 
     loop every 10 seconds
         Mobile->>Broker: publish gps payload
@@ -511,6 +514,28 @@ shows that direct writes are no longer sufficient.
 | created_at    | timestamptz |                       |
 | updated_at    | timestamptz |                       |
 
+### 11.1.1 auth_refresh_tokens
+
+| field                | type        | note                                  |
+| -------------------- | ----------- | ------------------------------------- |
+| id                   | uuid        | PK                                    |
+| user_id              | uuid        | FK users.id                           |
+| refresh_token_hash   | varchar     | SHA-256 hash, never store raw token   |
+| expires_at           | timestamptz | refresh session expiry                |
+| revoked_at           | timestamptz | nullable; set on logout or rotation   |
+| replaced_by_token_id | uuid        | nullable; points to rotated successor |
+| last_used_at         | timestamptz | nullable                              |
+| created_at           | timestamptz |                                       |
+| updated_at           | timestamptz |                                       |
+
+MVP rules:
+
+* access tokens are JWT bearer tokens used for API authorization
+* refresh tokens are opaque random tokens and must not be accepted as bearer access tokens
+* refresh tokens are stored only as hashes
+* refresh uses rotation: the old refresh token is revoked and a new refresh token is issued
+* logout revokes the current refresh token session
+
 ### 11.2 vehicles
 
 | field        | type        | note            |
@@ -614,12 +639,60 @@ Response:
 ```json
 {
   "access_token": "jwt-token",
+  "refresh_token": "opaque-refresh-token",
   "token_type": "bearer",
   "user": {
     "id": "uuid",
     "account": "driver001",
     "role": "driver"
   }
+}
+```
+
+#### `POST /auth/refresh`
+
+Purpose: rotate a valid refresh token and issue a new access / refresh token pair.
+
+Request:
+
+```json
+{
+  "refresh_token": "opaque-refresh-token"
+}
+```
+
+Response:
+
+```json
+{
+  "access_token": "new-jwt-token",
+  "refresh_token": "new-opaque-refresh-token",
+  "token_type": "bearer",
+  "user": {
+    "id": "uuid",
+    "account": "driver001",
+    "role": "driver"
+  }
+}
+```
+
+#### `POST /auth/logout`
+
+Purpose: revoke the current refresh token session.
+
+Request:
+
+```json
+{
+  "refresh_token": "opaque-refresh-token"
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok"
 }
 ```
 
