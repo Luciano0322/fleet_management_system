@@ -294,6 +294,20 @@ Build the web monitoring experience on top of FastAPI HTTP interfaces.
 * Publish a GPS message through MQTT.
 * Confirm the monitoring page updates after polling.
 
+### Phase 3 Implementation Notes
+
+* Implemented routes:
+  * `/login`
+  * `/monitoring`
+  * `/` redirects to the correct route after client auth hydration
+* The web client stores the MVP access / refresh token pair in browser local storage.
+* `401` responses from protected API calls trigger one `/auth/refresh` attempt before retrying the original request.
+* `/auth/logout` is called during sign-out and the local session is cleared afterward.
+* The monitoring page polls `/vehicles/latest-locations` every 5 seconds.
+* The polling lifecycle is isolated behind `apps/web/src/lib/monitoringRuntime.ts`.
+* This local runtime adapter models the intended `signal-kernel / async-runtime` boundary for cancellation, stale / fresh / error state, manual refresh, and future package replacement.
+* Backend CORS now allows the local web origin through `CORS_ORIGINS`.
+
 ### Do Not Do Yet
 
 * Do not implement WebSocket or SSE.

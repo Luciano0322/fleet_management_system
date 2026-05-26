@@ -1,32 +1,32 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { useEffect } from 'react'
+
+import { useAuthSession } from '../hooks/useAuthSession'
 
 export const Route = createFileRoute('/')({
   component: Home,
 })
 
 function Home() {
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+  const navigate = Route.useNavigate()
+  const { hydrated, session } = useAuthSession()
+
+  useEffect(() => {
+    if (!hydrated) {
+      return
+    }
+
+    void navigate({
+      to: session ? '/monitoring' : '/login',
+      replace: true,
+    })
+  }, [hydrated, navigate, session])
 
   return (
-    <main className="page-shell">
-      <section className="status-panel">
-        <p className="eyebrow">Phase 0 Runtime</p>
-        <h1>Fleet Management GPS Platform</h1>
-        <p>
-          TanStack Start is running. The monitoring surface will connect to
-          FastAPI through HTTP in the next phase.
-        </p>
-        <dl>
-          <div>
-            <dt>Backend</dt>
-            <dd>{apiBaseUrl}</dd>
-          </div>
-          <div>
-            <dt>Web Runtime</dt>
-            <dd>TanStack Start</dd>
-          </div>
-        </dl>
-      </section>
+    <main className="center-shell">
+      <div className="loading-mark" aria-live="polite">
+        Opening Fleet Monitor
+      </div>
     </main>
   )
 }

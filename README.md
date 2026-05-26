@@ -7,7 +7,7 @@ General-purpose real-time GPS vehicle location platform MVP.
 Phase 0 provides the platform-side scaffold:
 
 - FastAPI backend health endpoint
-- TanStack Start web placeholder
+- TanStack Start web login and monitoring shell
 - PostgreSQL
 - Mosquitto MQTT broker with local demo credentials
 - docker-compose orchestration
@@ -98,6 +98,30 @@ curl -s http://localhost:8000/vehicles/latest-locations \
 The seed vehicle should report the published latitude / longitude and become
 `online` for 30 seconds after ingestion.
 
+## Phase 3 Web Monitoring
+
+Open the web app and sign in with one of the seeded accounts:
+
+```text
+http://localhost:3000
+```
+
+The monitoring page uses the backend HTTP API only. It stores the MVP
+access / refresh token pair in browser local storage, refreshes expired access
+tokens through `/auth/refresh`, and revokes the refresh token on sign-out.
+
+The page displays:
+
+- visible users within the current JWT user's scope
+- visible vehicles
+- latest latitude / longitude
+- latest recorded time
+- backend-derived online / offline status
+- selected vehicle details
+
+Latest locations are polled every 5 seconds through the web monitoring runtime
+adapter under `apps/web/src/lib/monitoringRuntime.ts`.
+
 ## Useful Commands
 
 ```sh
@@ -106,10 +130,14 @@ docker compose logs -f backend
 docker compose logs -f web
 docker compose logs -f mqtt
 docker compose exec -e MQTT_INGESTION_ENABLED=false backend pytest
+cd apps/web
+npm run typecheck
+npm run build
+cd ../..
 docker compose down
 ```
 
-## Phase 0 Verification
+## Runtime Verification
 
 After `docker compose up --build`:
 

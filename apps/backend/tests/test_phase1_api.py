@@ -83,6 +83,19 @@ def test_protected_routes_require_token(client: TestClient) -> None:
     assert response.status_code == 401
 
 
+def test_cors_allows_local_web_origin(client: TestClient) -> None:
+    response = client.options(
+        "/users",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
 def test_refresh_token_rotates_and_new_access_token_works(client: TestClient) -> None:
     login_response = client.post(
         "/auth/login",

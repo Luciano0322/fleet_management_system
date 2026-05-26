@@ -29,6 +29,14 @@ class Settings:
     mqtt_password: str | None = os.getenv("MQTT_PASSWORD")
     mqtt_topic_filter: str = os.getenv("MQTT_TOPIC_FILTER", "gps/+")
     mqtt_client_id: str = os.getenv("MQTT_CLIENT_ID", "fms-backend-ingestion")
+    cors_origins: list[str] = [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://localhost:3000,http://127.0.0.1:3000",
+        ).split(",")
+        if origin.strip()
+    ]
 
 
 settings = Settings()
