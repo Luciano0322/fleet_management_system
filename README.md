@@ -8,12 +8,12 @@ Phase 0 provides the platform-side scaffold:
 
 - FastAPI backend health endpoint
 - TanStack Start web login and monitoring shell
+- Expo mobile foreground GPS uploader
 - PostgreSQL
 - Mosquitto MQTT broker with local demo credentials
 - docker-compose orchestration
 
-The React Native mobile app is represented by a placeholder under `apps/mobile`.
-It is not containerized in this MVP.
+The Expo mobile app is not containerized in this MVP.
 
 ## Prerequisites
 
@@ -34,6 +34,7 @@ The default local endpoints are:
 - Web: `http://localhost:3000`
 - PostgreSQL: `localhost:5432`
 - MQTT: `localhost:1883`
+- MQTT over WebSocket: `localhost:9001`
 
 ## MQTT Demo Credentials
 
@@ -122,6 +123,35 @@ The page displays:
 Latest locations are polled every 5 seconds through the web monitoring runtime
 adapter under `apps/web/src/lib/monitoringRuntime.ts`.
 
+## Phase 4 Mobile GPS Uploader
+
+The mobile app is an Expo managed app under `apps/mobile`. It logs in as a
+driver, fetches `/me/device-binding`, requests foreground location permission,
+and publishes GPS messages every 10 seconds through MQTT over WebSocket.
+
+```sh
+cd apps/mobile
+cp .env.example .env
+npm install
+npm run start
+```
+
+Use the seed driver account:
+
+```text
+driver001 / password123
+```
+
+The default mobile MQTT path is:
+
+```text
+ws://localhost:9001
+```
+
+For Android emulator the app falls back to `10.0.2.2`. For a physical device,
+set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_MQTT_WS_URL` in
+`apps/mobile/.env` to your computer's LAN IP address.
+
 ## Useful Commands
 
 ```sh
@@ -133,6 +163,9 @@ docker compose exec -e MQTT_INGESTION_ENABLED=false backend pytest
 cd apps/web
 npm run typecheck
 npm run build
+cd ../..
+cd apps/mobile
+npm run typecheck
 cd ../..
 docker compose down
 ```

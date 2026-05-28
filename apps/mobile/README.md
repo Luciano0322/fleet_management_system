@@ -1,6 +1,50 @@
-# Mobile App
+# Mobile GPS Uploader
 
-This directory is reserved for the React Native GPS uploader.
+Expo managed React Native app for Phase 4.
 
-Phase 0 intentionally does not scaffold the full native app because the MVP runtime
-is focused on platform-side services: backend, web, PostgreSQL, and MQTT.
+## Local Setup
+
+```sh
+cd apps/mobile
+cp .env.example .env
+npm install
+npm run start
+```
+
+Use the seed driver account:
+
+```text
+driver001 / password123
+```
+
+## Local Connectivity
+
+The app talks to:
+
+```text
+Backend HTTP: http://localhost:8000
+MQTT over WebSocket: ws://localhost:9001
+```
+
+For Android emulator, the defaults fall back to:
+
+```text
+http://10.0.2.2:8000
+ws://10.0.2.2:9001
+```
+
+For a physical device, replace both values in `.env` with your computer's LAN
+IP address.
+
+## Phase 4 Scope
+
+The app supports foreground-only uploads:
+
+- login against FastAPI
+- fetch the current driver's active device binding
+- request foreground location permission
+- publish GPS payloads to `gps/{vehicle_id}` every 10 seconds through MQTT over WebSocket
+- display current vehicle, upload status, latest publish time, and latest error
+
+Background tracking and offline queues are intentionally out of scope for this
+phase.

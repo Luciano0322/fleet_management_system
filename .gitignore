@@ -13,6 +13,11 @@ dist-ssr
 .next
 out
 *.tsbuildinfo
+apps/mobile/.expo
+apps/mobile/android
+apps/mobile/ios
+apps/mobile/web-build
+apps/mobile/expo-env.d.ts
 *.local
 .env
 .env.*

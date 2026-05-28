@@ -858,12 +858,12 @@ Notes:
 
 ### 15.1 Required
 
-* React Native + TypeScript
+* Expo managed React Native + TypeScript
 * login page
 * location permission request
 * start GPS upload
 * fetch location every 10 seconds
-* send payload through MQTT
+* send payload through MQTT over WebSocket
 
 ### 15.2 Optional but Valuable
 
@@ -882,9 +882,13 @@ Notes:
 
 The mobile app must support `.env` configuration for:
 
-* `API_BASE_URL`
-* `MQTT_HOST`
-* `MQTT_PORT`
+* `EXPO_PUBLIC_API_BASE_URL`
+* `EXPO_PUBLIC_MQTT_WS_URL`
+* `EXPO_PUBLIC_MQTT_USERNAME`
+* `EXPO_PUBLIC_MQTT_PASSWORD`
+
+The local broker exposes TCP MQTT on `1883` for backend / CLI usage and MQTT
+over WebSocket on `9001` for the Expo mobile app.
 
 ---
 
@@ -1033,7 +1037,7 @@ Build the minimal monitoring platform.
 
 ---
 
-### Phase 4: React Native Mobile App
+### Phase 4: Expo React Native Mobile App
 
 #### Goal
 
@@ -1042,10 +1046,10 @@ Build the GPS upload client.
 #### Tasks
 
 * login page
-* configure API / MQTT host
+* configure API / MQTT over WebSocket endpoint
 * request location permission
 * read location every 10 seconds
-* publish to `gps/{vehicle_id}`
+* publish to `gps/{vehicle_id}` through MQTT over WebSocket
 * show current upload status
 
 #### Acceptance Criteria
@@ -1054,6 +1058,7 @@ Build the GPS upload client.
 * mobile app can continuously send GPS messages
 * backend can receive and write the data
 * web can show changing locations
+* Mosquitto exposes MQTT over WebSocket for Expo clients
 
 ---
 

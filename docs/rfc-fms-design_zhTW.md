@@ -856,12 +856,12 @@ MVP 先使用簡單規則：
 
 ### 15.1 必做
 
-* React Native + TypeScript
+* Expo managed React Native + TypeScript
 * 登入頁
 * 定位授權請求
 * 開始上拋 GPS
 * 每 10 秒取一次位置
-* 透過 MQTT 發送 payload
+* 透過 MQTT over WebSocket 發送 payload
 
 ### 15.2 非必做但可加分
 
@@ -880,9 +880,12 @@ MVP 先使用簡單規則：
 
 Mobile app 需能透過 `.env` 指定：
 
-* `API_BASE_URL`
-* `MQTT_HOST`
-* `MQTT_PORT`
+* `EXPO_PUBLIC_API_BASE_URL`
+* `EXPO_PUBLIC_MQTT_WS_URL`
+* `EXPO_PUBLIC_MQTT_USERNAME`
+* `EXPO_PUBLIC_MQTT_PASSWORD`
+
+local broker 對 backend / CLI 保留 TCP MQTT `1883`，並對 Expo mobile app 開放 MQTT over WebSocket `9001`。
 
 ---
 
@@ -1031,7 +1034,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 
 ---
 
-### Phase 4：React Native Mobile App
+### Phase 4：Expo React Native Mobile App
 
 #### 目標
 
@@ -1040,10 +1043,10 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 #### 任務
 
 * 登入頁
-* 設定 API / MQTT host
+* 設定 API / MQTT over WebSocket endpoint
 * 取得定位授權
 * 每 10 秒讀取一次位置
-* publish 到 `gps/{vehicle_id}`
+* 透過 MQTT over WebSocket publish 到 `gps/{vehicle_id}`
 * 顯示目前上拋狀態
 
 #### 驗收標準
@@ -1052,6 +1055,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * mobile 可持續送出 GPS 訊息
 * backend 可接收並寫入資料
 * web 可看到位置變化
+* Mosquitto 對 Expo client 開放 MQTT over WebSocket
 
 ---
 

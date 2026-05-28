@@ -326,18 +326,19 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 
 ### Tasks
 
-* Create React Native app under `apps/mobile`.
+* Create Expo managed React Native app under `apps/mobile`.
 * Configure TypeScript.
 * Add `.env` support for:
-  * `API_BASE_URL`
-  * `MQTT_HOST`
-  * `MQTT_PORT`
+  * `EXPO_PUBLIC_API_BASE_URL`
+  * `EXPO_PUBLIC_MQTT_WS_URL`
+  * `EXPO_PUBLIC_MQTT_USERNAME`
+  * `EXPO_PUBLIC_MQTT_PASSWORD`
 * Build login screen.
 * Call `POST /auth/login`.
 * Fetch `GET /me/device-binding` after login.
 * Request location permission.
 * Read foreground location every 10 seconds.
-* Publish GPS payload to `gps/{vehicle_id}` through MQTT.
+* Publish GPS payload to `gps/{vehicle_id}` through MQTT over WebSocket.
 * Display:
   * bound vehicle
   * upload enabled / disabled state
@@ -353,6 +354,7 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 * Mobile app publishes GPS payload every 10 seconds while active.
 * Backend accepts valid mobile GPS messages.
 * Web monitoring page shows changing location data.
+* Mosquitto exposes TCP MQTT on `1883` and MQTT over WebSocket on `9001`.
 
 ### Verification
 
@@ -362,6 +364,21 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 * Log in with seed driver.
 * Confirm backend logs accepted MQTT messages.
 * Confirm web monitoring updates.
+
+### Phase 4 Implementation Notes
+
+* Implemented Expo SDK 56 managed app under `apps/mobile`.
+* The mobile MQTT path uses MQTT.js over WebSocket, not a native TCP MQTT module.
+* Mosquitto now exposes:
+  * `1883` for backend subscriber and CLI publishing
+  * `9001` for Expo / React Native MQTT over WebSocket
+* Mobile env values use Expo public env names:
+  * `EXPO_PUBLIC_API_BASE_URL`
+  * `EXPO_PUBLIC_MQTT_WS_URL`
+  * `EXPO_PUBLIC_MQTT_USERNAME`
+  * `EXPO_PUBLIC_MQTT_PASSWORD`
+* GPS publishes use QoS 1 to avoid losing the message during short-lived or unstable mobile connections.
+* Upload remains foreground-only; background mode is still deferred.
 
 ### Do Not Do Yet
 
