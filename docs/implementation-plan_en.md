@@ -367,7 +367,7 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 
 ### Phase 4 Implementation Notes
 
-* Implemented Expo SDK 56 managed app under `apps/mobile`.
+* Implemented Expo SDK 54 managed app under `apps/mobile` for Expo Go compatibility.
 * The mobile MQTT path uses MQTT.js over WebSocket, not a native TCP MQTT module.
 * Mosquitto now exposes:
   * `1883` for backend subscriber and CLI publishing

@@ -1,6 +1,7 @@
 # Mobile GPS Uploader
 
-Expo managed React Native app for Phase 4.
+Expo SDK 54 managed React Native app for Phase 4. SDK 54 is used so the app can
+run in the currently available Expo Go version.
 
 ## Local Setup
 

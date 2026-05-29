@@ -1,4 +1,4 @@
-declare module 'mqtt/dist/mqtt' {
+declare module 'mqtt/dist/mqtt.esm' {
   import type { IClientOptions, IClientPublishOptions, MqttClient } from 'mqtt'
 
   const mqtt: {

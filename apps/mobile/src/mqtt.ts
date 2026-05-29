@@ -1,22 +1,11 @@
-import 'react-native-url-polyfill/auto'
-
-import { Buffer } from 'buffer'
 import mqtt, {
   type IClientOptions,
   type IClientPublishOptions,
   type MqttClient,
-} from 'mqtt/dist/mqtt'
+} from 'mqtt/dist/mqtt.esm'
 
 import { config } from './config'
 import type { GpsPayload } from './types'
-
-const globalWithBuffer = globalThis as typeof globalThis & {
-  Buffer?: typeof Buffer
-}
-
-if (!globalWithBuffer.Buffer) {
-  globalWithBuffer.Buffer = Buffer
-}
 
 export function connectGpsMqttClient(): Promise<MqttClient> {
   const clientId = `fms-mobile-${Math.random().toString(16).slice(2)}`
@@ -24,6 +13,7 @@ export function connectGpsMqttClient(): Promise<MqttClient> {
     clientId,
     clean: true,
     connectTimeout: 8000,
+    forceNativeWebSocket: true,
     keepalive: 30,
     password: config.mqttPassword,
     protocolVersion: 4,
@@ -33,20 +23,46 @@ export function connectGpsMqttClient(): Promise<MqttClient> {
 
   return new Promise((resolve, reject) => {
     const client = mqtt.connect(config.mqttWsUrl, options)
+    let settled = false
     const timeoutId = setTimeout(() => {
+      if (settled) {
+        return
+      }
+      settled = true
       client.end(true)
-      reject(new Error('MQTT connection timed out'))
+      reject(new Error(`MQTT connection timed out: ${config.mqttWsUrl}`))
     }, options.connectTimeout)
 
     client.once('connect', () => {
+      if (settled) {
+        return
+      }
+      settled = true
       clearTimeout(timeoutId)
       resolve(client)
     })
 
     client.once('error', (error) => {
+      if (settled) {
+        return
+      }
+      settled = true
       clearTimeout(timeoutId)
       client.end(true)
-      reject(error)
+      reject(new Error(`MQTT WebSocket error: ${error.message}`))
+    })
+
+    client.once('close', () => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timeoutId)
+      reject(
+        new Error(
+          `MQTT WebSocket closed before CONNECT: ${config.mqttWsUrl}`,
+        ),
+      )
     })
   })
 }
