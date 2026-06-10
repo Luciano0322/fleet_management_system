@@ -1,6 +1,31 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { Check, Copy, LogOut, RefreshCw } from 'lucide-react'
+import {
+  type MouseEvent,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { cn } from '@/lib/utils'
 import { useAuthSession } from '../hooks/useAuthSession'
 import { useMonitoringRuntime } from '../hooks/useMonitoringRuntime'
 import { logout } from '../lib/api'
@@ -29,8 +54,8 @@ function MonitoringPage() {
   const navigate = Route.useNavigate()
   const { hydrated, session } = useAuthSession()
   const { state, refreshNow } = useMonitoringRuntime(Boolean(session))
-  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [copiedVehicleId, setCopiedVehicleId] = useState<string | null>(null)
 
   useEffect(() => {
     if (hydrated && !session) {
@@ -87,19 +112,6 @@ function MonitoringPage() {
     )
   }, [state.latestLocations, state.vehicles])
 
-  useEffect(() => {
-    if (fleetRows.length === 0) {
-      setSelectedVehicleId(null)
-      return
-    }
-    if (!selectedVehicleId || !fleetRows.some((row) => row.vehicleId === selectedVehicleId)) {
-      setSelectedVehicleId(fleetRows[0].vehicleId)
-    }
-  }, [fleetRows, selectedVehicleId])
-
-  const selectedVehicle =
-    fleetRows.find((row) => row.vehicleId === selectedVehicleId) ?? null
-
   async function handleLogout() {
     setIsLoggingOut(true)
     try {
@@ -110,10 +122,25 @@ function MonitoringPage() {
     }
   }
 
+  async function handleCopyCoordinates(row: FleetRow) {
+    const coordinates = formatCoordinates(row.latitude, row.longitude)
+    if (!hasCoordinates(row)) {
+      return
+    }
+
+    await copyTextToClipboard(coordinates)
+    setCopiedVehicleId(row.vehicleId)
+    window.setTimeout(() => {
+      setCopiedVehicleId((current) =>
+        current === row.vehicleId ? null : current,
+      )
+    }, 1800)
+  }
+
   if (!hydrated || !session) {
     return (
-      <main className="center-shell">
-        <div className="loading-mark" aria-live="polite">
+      <main className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="text-sm font-medium text-muted-foreground" aria-live="polite">
           Loading session
         </div>
       </main>
@@ -125,178 +152,246 @@ function MonitoringPage() {
   const errorMessage = state.error ? errorToMessage(state.error) : null
 
   return (
-    <main className="monitor-shell">
-      <header className="monitor-header">
-        <div>
-          <p className="eyebrow">Fleet Monitor</p>
-          <h1>Live vehicle status</h1>
-        </div>
-        <div className="session-actions">
-          <div className="session-user">
-            <span>{session.user.account}</span>
-            <strong>{session.user.role}</strong>
+    <main className="min-h-screen bg-background p-4 md:p-6">
+      <div className="mx-auto grid max-w-screen-2xl gap-4">
+        <header className="flex flex-col gap-4 border-b pb-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">
+              Fleet Monitor
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+              Live tracking status
+            </h1>
           </div>
-          <button
-            className="secondary-button"
-            disabled={isLoggingOut}
-            onClick={handleLogout}
-          >
-            {isLoggingOut ? 'Signing out' : 'Sign out'}
-          </button>
-        </div>
-      </header>
-
-      <section className="monitor-toolbar" aria-label="Monitoring status">
-        <div className={`status-pill status-${state.freshness}`}>
-          <span>{state.freshness}</span>
-          <strong>{state.status}</strong>
-        </div>
-        <div className="toolbar-copy">
-          <span>Last updated</span>
-          <strong>{formatDateTime(state.lastUpdatedAt)}</strong>
-        </div>
-        <button
-          className="secondary-button"
-          disabled={state.status === 'pending'}
-          onClick={refreshNow}
-        >
-          {state.status === 'pending' ? 'Refreshing' : 'Refresh'}
-        </button>
-      </section>
-
-      {errorMessage ? (
-        <div className="error-banner" role="alert">
-          {errorMessage}
-        </div>
-      ) : null}
-
-      <div className="monitor-layout">
-        <aside className="scope-panel" aria-labelledby="scope-title">
-          <div className="panel-heading">
-            <h2 id="scope-title">Visible users</h2>
-            <span>{state.users.length}</span>
-          </div>
-          {state.users.length > 0 ? (
-            <ul className="user-list">
-              {state.users.map((user) => (
-                <li key={user.id}>
-                  <span>{user.account}</span>
-                  <strong>{user.role}</strong>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="empty-copy">No visible users</p>
-          )}
-        </aside>
-
-        <section className="vehicle-panel" aria-labelledby="vehicles-title">
-          <div className="panel-heading">
-            <h2 id="vehicles-title">Vehicles</h2>
-            <span>{fleetRows.length}</span>
-          </div>
-          {isInitialLoading ? (
-            <div className="table-state">Loading fleet data</div>
-          ) : fleetRows.length > 0 ? (
-            <div className="vehicle-table" role="table">
-              <div className="vehicle-row vehicle-row-head" role="row">
-                <span>Vehicle</span>
-                <span>Driver</span>
-                <span>Status</span>
-                <span>Coordinates</span>
-                <span>Recorded</span>
-              </div>
-              {fleetRows.map((row) => (
-                <button
-                  key={row.vehicleId}
-                  className={
-                    row.vehicleId === selectedVehicleId
-                      ? 'vehicle-row vehicle-row-active'
-                      : 'vehicle-row'
-                  }
-                  onClick={() => setSelectedVehicleId(row.vehicleId)}
-                  role="row"
-                >
-                  <span>
-                    <strong>{row.plateNumber}</strong>
-                    <small>{row.name ?? 'Unnamed vehicle'}</small>
-                  </span>
-                  <span>{row.driverAccount ?? 'Unassigned'}</span>
-                  <span>
-                    <StatusBadge status={row.onlineStatus} />
-                  </span>
-                  <span>{formatCoordinates(row.latitude, row.longitude)}</span>
-                  <span>{formatDateTime(row.recordedAt)}</span>
-                </button>
-              ))}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="grid gap-0.5 text-left sm:text-right">
+              <span className="text-sm font-medium">{session.user.account}</span>
+              <span className="text-xs font-medium uppercase text-muted-foreground">
+                {session.user.role}
+              </span>
             </div>
-          ) : (
-            <div className="table-state">No vehicles in scope</div>
-          )}
+            <Button
+              disabled={isLoggingOut}
+              onClick={handleLogout}
+              type="button"
+              variant="outline"
+            >
+              <LogOut />
+              {isLoggingOut ? 'Signing out' : 'Sign out'}
+            </Button>
+          </div>
+        </header>
+
+        <section
+          className="flex flex-col gap-3 rounded-lg border bg-card p-3 text-card-foreground shadow-xs md:flex-row md:items-center"
+          aria-label="Monitoring status"
+        >
+          <Badge className={freshnessBadgeClass(state.freshness)}>
+            {state.freshness}
+            <span className="ml-1 opacity-80">{state.status}</span>
+          </Badge>
+          <div className="mr-auto grid gap-0.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              Last updated
+            </span>
+            <strong className="text-sm font-semibold">
+              {formatDateTime(state.lastUpdatedAt)}
+            </strong>
+          </div>
+          <Button
+            disabled={state.status === 'pending'}
+            onClick={refreshNow}
+            type="button"
+            variant="secondary"
+          >
+            <RefreshCw
+              className={cn(state.status === 'pending' && 'animate-spin')}
+            />
+            {state.status === 'pending' ? 'Refreshing' : 'Refresh'}
+          </Button>
         </section>
 
-        <aside className="detail-panel" aria-labelledby="detail-title">
-          <div className="panel-heading">
-            <h2 id="detail-title">Selected vehicle</h2>
-          </div>
-          {selectedVehicle ? (
-            <VehicleDetail row={selectedVehicle} />
-          ) : (
-            <p className="empty-copy">No vehicle selected</p>
-          )}
-        </aside>
+        {errorMessage ? (
+          <Alert variant="destructive">
+            <AlertDescription>{errorMessage}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <div className="grid items-start gap-4 xl:grid-cols-[240px_minmax(0,1fr)]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Visible accounts
+                <Badge variant="secondary">{state.users.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {state.users.length > 0 ? (
+                <ul className="grid gap-2">
+                  {state.users.map((user) => (
+                    <li
+                      className="grid gap-1 rounded-md border bg-background p-3"
+                      key={user.id}
+                    >
+                      <span className="text-sm font-medium">{user.account}</span>
+                      <span className="text-xs font-medium uppercase text-muted-foreground">
+                        {user.role}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">No visible users</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden py-0">
+            <CardHeader className="border-b py-4">
+              <CardTitle className="flex items-center justify-between">
+                Tracked users
+                <Badge variant="secondary">{fleetRows.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {isInitialLoading ? (
+                <VehicleTableSkeleton />
+              ) : fleetRows.length > 0 ? (
+                <Table className="min-w-[860px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>User</TableHead>
+                      <TableHead>Tracking ref</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Coordinates</TableHead>
+                      <TableHead>Speed</TableHead>
+                      <TableHead>Last seen</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fleetRows.map((row) => (
+                      <TableRow key={row.vehicleId}>
+                        <TableCell>
+                          <div className="grid gap-0.5">
+                            <span className="font-medium">
+                              {row.driverAccount ?? 'Unassigned'}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {row.name ?? row.plateNumber}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {row.plateNumber}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={row.onlineStatus} />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="cursor-text font-mono text-xs">
+                              {formatCoordinates(row.latitude, row.longitude)}
+                            </span>
+                            <CopyCoordinatesButton
+                              copied={copiedVehicleId === row.vehicleId}
+                              disabled={!hasCoordinates(row)}
+                              onCopy={(event) => {
+                                event.stopPropagation()
+                                void handleCopyCoordinates(row)
+                              }}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {row.speed === null ? 'No data' : `${row.speed.toFixed(1)} km/h`}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDateTime(row.lastSeenAt)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="p-6 text-sm text-muted-foreground">
+                  No tracked users in scope
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </main>
   )
 }
 
 function StatusBadge({ status }: Readonly<{ status: string }>) {
-  return <span className={`fleet-status fleet-status-${status}`}>{status}</span>
+  const online = status === 'online'
+  return (
+    <Badge
+      className={cn(
+        'uppercase',
+        online
+          ? 'border-emerald-200 bg-emerald-100 text-emerald-800'
+          : 'border-neutral-200 bg-neutral-100 text-neutral-600',
+      )}
+      variant="outline"
+    >
+      {status}
+    </Badge>
+  )
 }
 
-function VehicleDetail({ row }: Readonly<{ row: FleetRow }>) {
+function CopyCoordinatesButton({
+  copied,
+  disabled,
+  onCopy,
+}: Readonly<{
+  copied: boolean
+  disabled: boolean
+  onCopy: (event: MouseEvent<HTMLButtonElement>) => void
+}>) {
   return (
-    <dl className="detail-list">
-      <div>
-        <dt>Plate</dt>
-        <dd>{row.plateNumber}</dd>
-      </div>
-      <div>
-        <dt>Driver</dt>
-        <dd>{row.driverAccount ?? 'Unassigned'}</dd>
-      </div>
-      <div>
-        <dt>Online status</dt>
-        <dd>
-          <StatusBadge status={row.onlineStatus} />
-        </dd>
-      </div>
-      <div>
-        <dt>Latitude</dt>
-        <dd>{formatNumber(row.latitude)}</dd>
-      </div>
-      <div>
-        <dt>Longitude</dt>
-        <dd>{formatNumber(row.longitude)}</dd>
-      </div>
-      <div>
-        <dt>Speed</dt>
-        <dd>{row.speed === null ? 'No data' : `${row.speed.toFixed(1)} km/h`}</dd>
-      </div>
-      <div>
-        <dt>Heading</dt>
-        <dd>{row.heading === null ? 'No data' : `${row.heading.toFixed(0)} deg`}</dd>
-      </div>
-      <div>
-        <dt>Recorded at</dt>
-        <dd>{formatDateTime(row.recordedAt)}</dd>
-      </div>
-      <div>
-        <dt>Last seen at</dt>
-        <dd>{formatDateTime(row.lastSeenAt)}</dd>
-      </div>
-    </dl>
+    <Button
+      aria-label={copied ? 'Coordinates copied' : 'Copy coordinates'}
+      className={cn(
+        'size-8',
+        copied && 'bg-emerald-100 text-emerald-800 hover:bg-emerald-100',
+      )}
+      disabled={disabled}
+      onClick={onCopy}
+      onKeyDown={(event) => event.stopPropagation()}
+      title={copied ? 'Coordinates copied' : 'Copy coordinates'}
+      type="button"
+      variant="ghost"
+    >
+      {copied ? <Check /> : <Copy />}
+    </Button>
   )
+}
+
+function VehicleTableSkeleton() {
+  return (
+    <div className="grid gap-3 p-4">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <Skeleton className="h-12 w-full" key={index} />
+      ))}
+    </div>
+  )
+}
+
+function freshnessBadgeClass(freshness: string): string {
+  if (freshness === 'fresh') {
+    return 'border-emerald-200 bg-emerald-100 text-emerald-800'
+  }
+  if (freshness === 'stale') {
+    return 'border-amber-200 bg-amber-100 text-amber-800'
+  }
+  return 'border-neutral-200 bg-neutral-100 text-neutral-700'
+}
+
+function hasCoordinates(row: FleetRow): boolean {
+  return row.latitude !== null && row.longitude !== null
 }
 
 function formatCoordinates(
@@ -306,7 +401,7 @@ function formatCoordinates(
   if (latitude === null || longitude === null) {
     return 'No location'
   }
-  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`
+  return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
 }
 
 function formatNumber(value: number | null): string {
@@ -327,4 +422,31 @@ function formatDateTime(value: string | null): string {
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(date)
+}
+
+async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      // Fall back for non-secure local URLs and browsers with stricter clipboard rules.
+    }
+  }
+
+  const textArea = document.createElement('textarea')
+  textArea.value = text
+  textArea.setAttribute('readonly', '')
+  textArea.style.left = '-9999px'
+  textArea.style.position = 'fixed'
+  textArea.style.top = '0'
+  document.body.appendChild(textArea)
+  textArea.focus()
+  textArea.select()
+
+  try {
+    document.execCommand('copy')
+  } finally {
+    document.body.removeChild(textArea)
+  }
 }

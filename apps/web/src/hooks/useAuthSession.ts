@@ -1,26 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
+import type { AuthSession } from '../lib/authStorage'
 import {
-  readAuthSession,
-  subscribeAuthSession,
-  type AuthSession,
-} from '../lib/authStorage'
+  initializeAuthSessionStore,
+  useAuthSessionStore,
+} from '../stores/authSessionStore'
 
 export function useAuthSession(): {
   hydrated: boolean
   session: AuthSession | null
 } {
-  const [hydrated, setHydrated] = useState(false)
-  const [session, setSession] = useState<AuthSession | null>(null)
+  const hydrated = useAuthSessionStore((state) => state.hydrated)
+  const session = useAuthSessionStore((state) => state.session)
 
   useEffect(() => {
-    const syncSession = () => {
-      setSession(readAuthSession())
-      setHydrated(true)
-    }
-
-    syncSession()
-    return subscribeAuthSession(syncSession)
+    return initializeAuthSessionStore()
   }, [])
 
   return { hydrated, session }

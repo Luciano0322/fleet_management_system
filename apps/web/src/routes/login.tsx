@@ -1,6 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { useAuthSession } from '../hooks/useAuthSession'
 import { login } from '../lib/api'
 
@@ -42,38 +53,46 @@ function LoginPage() {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-panel" aria-labelledby="login-title">
-        <p className="eyebrow">Fleet Monitor</p>
-        <h1 id="login-title">Sign in</h1>
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <label>
-            <span>Account</span>
-            <input
-              autoComplete="username"
-              value={account}
-              onChange={(event) => setAccount(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Password</span>
-            <input
-              autoComplete="current-password"
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          {error ? (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <button className="primary-button" disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in' : 'Sign in'}
-          </button>
-        </form>
-      </section>
+    <main className="flex min-h-screen items-center bg-background p-6">
+      <Card className="w-full max-w-sm" aria-labelledby="login-title">
+        <CardHeader>
+          <CardDescription>Fleet Monitor</CardDescription>
+          <CardTitle className="text-2xl" id="login-title">
+            Sign in
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form className="grid gap-4" onSubmit={handleSubmit}>
+            <div className="grid gap-2">
+              <Label htmlFor="account">Account</Label>
+              <Input
+                autoComplete="username"
+                id="account"
+                value={account}
+                onChange={(event) => setAccount(event.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                autoComplete="current-password"
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <Button disabled={isSubmitting}>
+              {isSubmitting ? 'Signing in' : 'Sign in'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   )
 }

@@ -1,44 +1,62 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 
-import {
-  initialMonitoringState,
-  MonitoringRuntime,
-  type MonitoringRuntimeState,
-} from '../lib/monitoringRuntime'
+import type { MonitoringRuntimeState } from '../lib/monitoringRuntime'
+import { useMonitoringStore } from '../stores/monitoringStore'
 
 export function useMonitoringRuntime(enabled: boolean): {
   state: MonitoringRuntimeState
   refreshNow: () => void
 } {
-  const runtimeRef = useRef<MonitoringRuntime | null>(null)
-  const [state, setState] = useState<MonitoringRuntimeState>(
-    initialMonitoringState,
-  )
+  const users = useMonitoringStore((state) => state.users)
+  const vehicles = useMonitoringStore((state) => state.vehicles)
+  const latestLocations = useMonitoringStore((state) => state.latestLocations)
+  const status = useMonitoringStore((state) => state.status)
+  const freshness = useMonitoringStore((state) => state.freshness)
+  const refreshSource = useMonitoringStore((state) => state.refreshSource)
+  const error = useMonitoringStore((state) => state.error)
+  const lastUpdatedAt = useMonitoringStore((state) => state.lastUpdatedAt)
+  const refreshNow = useMonitoringStore((state) => state.refreshNow)
+  const start = useMonitoringStore((state) => state.start)
+  const stop = useMonitoringStore((state) => state.stop)
 
   useEffect(() => {
     if (!enabled) {
-      runtimeRef.current?.stop()
-      runtimeRef.current = null
-      setState(initialMonitoringState)
+      stop()
       return undefined
     }
 
-    const runtime = new MonitoringRuntime()
-    runtimeRef.current = runtime
-    const unsubscribe = runtime.subscribe(setState)
-    runtime.start()
+    start()
 
     return () => {
-      unsubscribe()
-      runtime.stop()
-      if (runtimeRef.current === runtime) {
-        runtimeRef.current = null
-      }
+      stop()
     }
-  }, [enabled])
+  }, [enabled, start, stop])
+
+  const state = useMemo(
+    () => ({
+      users,
+      vehicles,
+      latestLocations,
+      status,
+      freshness,
+      refreshSource,
+      error,
+      lastUpdatedAt,
+    }),
+    [
+      users,
+      vehicles,
+      latestLocations,
+      status,
+      freshness,
+      refreshSource,
+      error,
+      lastUpdatedAt,
+    ],
+  )
 
   return {
     state,
-    refreshNow: () => runtimeRef.current?.refreshNow(),
+    refreshNow,
   }
 }

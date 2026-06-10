@@ -23,8 +23,8 @@ function Home() {
   }, [hydrated, navigate, session])
 
   return (
-    <main className="center-shell">
-      <div className="loading-mark" aria-live="polite">
+    <main className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="text-sm font-medium text-muted-foreground" aria-live="polite">
         Opening Fleet Monitor
       </div>
     </main>
