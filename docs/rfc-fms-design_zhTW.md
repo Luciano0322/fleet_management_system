@@ -1,9 +1,9 @@
-# RFC: 通用型即時 GPS 車輛定位平台 MVP
+# RFC: 通用型即時 GPS 追蹤平台 MVP
 
 **Status**: Draft
 **Target**: Agent Implementation RFC
-**Primary Goal**: 先完成一套可運行、可展示、可逐步擴展的即時 GPS 定位平台 MVP
-**Last Updated**: 2026-05-19
+**Primary Goal**: 先完成一套可運行、可展示、可逐步擴展的即時 GPS 追蹤平台 MVP
+**Last Updated**: 2026-06-12
 
 ---
 
@@ -34,7 +34,7 @@
 1. 使用者可以登入系統
 2. Mobile App 可在登入後每 10 秒上拋一次 GPS 資料
 3. Backend 可透過 MQTT 接收 GPS 訊息並寫入 PostgreSQL
-4. Web 平台可查看車輛最新位置與在線狀態
+4. Web 平台可查看 driver / mobile tracking target 的最新位置與在線狀態
 5. 所有平台側環境盡量透過 `docker-compose` 啟動
 6. 架構需為未來加入 Redis、提升到 5 秒 / 1 秒頻率預留空間
 
@@ -58,7 +58,7 @@
 
 本專案第一階段的產品定義如下：
 
-> **通用型即時車輛定位與監控平台 MVP**
+> **通用型即時 GPS 追蹤與監控平台 MVP**
 
 它不是完整車隊 ERP，也不是針對特定車種的客製管理系統。
 
@@ -68,6 +68,8 @@
 * 後端資料鏈路清楚且可持續運作
 * Web 端可查看最新位置與在線狀態
 * 系統架構能平順演進到更高流量場景
+
+本 MVP 的監控主體是 **driver / mobile app instance**。手機跟著 driver 移動，因此 Web 端的切換、篩選與狀態呈現應以 driver 為中心，而不是以車輛為中心。
 
 ---
 
@@ -186,16 +188,18 @@ MVP 階段需遵守：
 * `operator`
 * `driver`
 
-### 5.2 Vehicle / Device 基礎關聯
+### 5.2 Driver / Mobile / Tracking Reference 基礎關聯
 
 必做：
 
 * User 可登入
-* Driver 可綁定車輛
-* 一支 mobile app 視為一個裝置上拋端
-* 車輛與使用者為基本關聯模型
+* Driver 使用 mobile app 作為 GPS 上拋端
+* 一支 mobile app instance 視為一個裝置上拋端
+* Web 監控主體是 driver / mobile tracking target
+* operator / admin 可切換或篩選不同 driver；車輛不是第一版 UI 的切換對象
+* `vehicles` 在 MVP 中保留為 tracking reference / 相容資料表，用於維持 GPS topic、latest row 與歷史資料的現有 key，不代表第一版有車機或需要車輛切換流程
 * admin / operator 這類 monitoring user 可透過基礎從屬關係監控 driver
-* Web 端只能看到目前 JWT 使用者可見範圍內的註冊使用者、車輛與定位資料
+* Web 端只能看到目前 JWT 使用者可見範圍內的註冊 driver、tracking reference 與定位資料
 
 ### 5.2.1 User Relationship / Visibility Scope
 
@@ -203,7 +207,7 @@ MVP 階段需遵守：
 
 定義：
 
-* `admin`：可監控所有 active users、vehicles、device bindings 與 GPS data
+* `admin`：可監控所有 active users、tracking references、device bindings 與 GPS data
 * `operator`：只能監控透過 active relationship 指派給自己的 driver users
 * `driver`：只能查看自己與自己的 device binding；GPS 上拋也只能使用自己的 active binding
 
@@ -223,10 +227,11 @@ MVP 階段需遵守：
 
 必做：
 
-* 顯示車輛列表
-* 顯示車輛最新位置
-* 顯示車輛在線 / 離線狀態
-* 點選車輛查看最近一次上拋時間與位置
+* 顯示目前 visibility scope 內的 tracked drivers
+* 顯示 driver / mobile tracking target 最新位置
+* 顯示 driver / mobile tracking target 在線 / 離線狀態
+* 若提供切換或篩選，切換對象應是 driver，不是 vehicle
+* 不使用 vehicle row selection 或 selected vehicle detail 作為第一版主要互動模式
 
 ### 5.5 Dockerized Local Environment
 
@@ -294,7 +299,7 @@ Mosquitto]
 
 建議輪詢頻率：
 
-* 車輛列表 / 最新定位：每 5 秒輪詢一次
+* tracked driver 最新定位：每 5 秒輪詢一次
 
 備註：
 
@@ -444,7 +449,7 @@ flowchart TD
 
 #### postgres
 
-* 儲存使用者、車輛、裝置綁定、最新位置、歷史位置
+* 儲存使用者、tracking references、裝置綁定、最新位置、歷史位置
 
 #### mqtt
 
@@ -545,6 +550,13 @@ MVP 規則：
 | created_at   | timestamptz |                 |
 | updated_at   | timestamptz |                 |
 
+MVP 語意：
+
+* `vehicles` 目前作為 **tracking reference** 使用，用來承接既有 `vehicle_id` topic、`gps_latest` primary key 與歷史資料查詢
+* 第一版 Web UI 不把 vehicle 當成主要操作或切換對象
+* 目前沒有車機概念；GPS 上拋端是 driver 的 mobile app
+* 若未來要導入真實車輛資產、車機、車輛調度或司機換車流程，需另開 RFC 調整 domain model 與 API 命名
+
 ### 11.3 device_bindings
 
 | field             | type        | note                   |
@@ -561,7 +573,10 @@ MVP 規則：
 MVP 約束：
 
 * 同一個 `user_id + vehicle_id + device_identifier` 只能有一筆 active binding
-* 第一版預設一台車同時間只有一個 active mobile 上拋端；若未來需要雙機備援，需另開 RFC 調整 online 判斷與衝突處理
+* 第一版預設每個 driver 使用自己的 mobile app 作為 active 上拋端
+* operator / admin 可在 Web 端查看或切換不同 driver 的監控資料
+* Web UI 不提供 vehicle switching；`vehicle_id` 僅作為目前資料鏈路的 tracking reference key
+* 若未來需要一個 driver 多個 active tracking target、雙機備援、或真實車機與 mobile 同時上拋，需另開 RFC 調整 online 判斷與衝突處理
 
 ### 11.4 user_relationships
 
@@ -610,7 +625,7 @@ MVP 約束：
 
 MVP 索引：
 
-* `gps_history(vehicle_id, recorded_at desc)`：支援單車歷史軌跡查詢
+* `gps_history(vehicle_id, recorded_at desc)`：支援單一 tracking reference 歷史軌跡查詢
 * `gps_latest(vehicle_id)`：由 primary key 提供
 * `device_bindings(user_id, vehicle_id, device_identifier, status)`：支援 MQTT payload 驗證
 * `user_relationships(parent_user_id, child_user_id, status)`：支援 Web monitoring visibility scope 查詢
@@ -700,11 +715,15 @@ Response:
 
 #### `GET /vehicles`
 
-用途：取得目前 JWT user 可見範圍內的車輛列表。
+用途：取得目前 JWT user 可見範圍內的 tracking references。
+
+備註：此 endpoint 名稱沿用目前 `vehicles` 資料表；Web UI 不應將它呈現為可切換車輛流程，第一版主要監控對象仍是 driver / mobile tracking target。
 
 #### `GET /vehicles/latest-locations`
 
-用途：取得目前 JWT user 可見範圍內的車輛最新位置，供 Web 監控頁使用。
+用途：取得目前 JWT user 可見範圍內的 tracked driver 最新位置，供 Web 監控頁使用。
+
+備註：response 仍包含 `vehicle_id` / `plate_number` 作為 MVP tracking reference，但 UI 呈現應以 `driver_user_id` / `driver_account` 為主。
 
 Response example:
 
@@ -725,7 +744,7 @@ Response example:
 
 #### `GET /vehicles/{vehicle_id}/history?from=...&to=...`
 
-用途：取得目前 JWT user 可見範圍內單一車輛的歷史軌跡。
+用途：取得目前 JWT user 可見範圍內單一 tracking reference 的歷史軌跡。
 
 ---
 
@@ -747,7 +766,9 @@ MVP 規則：
 
 #### `GET /me/device-binding`
 
-用途：mobile app 取得目前綁定車輛資訊
+用途：mobile app 取得目前 driver 的 active tracking binding。
+
+備註：第一版 mobile app 不需要提供車輛切換；driver 登入後使用自己的 active binding 上拋 GPS。若未來允許 driver 多個 active tracking targets，應新增 plural API，例如 `GET /me/device-bindings`，並讓 mobile 明確選擇上拋目標。
 
 ### 12.5 Visibility Scope 規則
 
@@ -835,7 +856,7 @@ Backend 必須：
 * 不要求第一版實作 broker ACL 自動同步
 * 不要求第一版實作 mTLS
 
-但未來 production 化前，需補上 per-device credential 或 broker ACL，避免裝置能 publish 到非綁定車輛的 topic。
+但未來 production 化前，需補上 per-device credential 或 broker ACL，避免裝置能 publish 到非綁定 tracking reference 的 topic。
 
 ---
 
@@ -865,7 +886,7 @@ MVP 先使用簡單規則：
 
 ### 15.2 非必做但可加分
 
-* 顯示目前綁定車輛
+* 顯示目前 active tracking binding
 * 顯示目前上拋狀態
 * 顯示最近一次上拋時間
 * 簡單的失敗重試
@@ -897,11 +918,12 @@ local broker 對 backend / CLI 保留 TCP MQTT `1883`，並對 Expo mobile app �
 * 登入頁
 * 監控主頁
 * 顯示目前可見範圍內的註冊使用者
-* 車輛列表
+* tracked driver 列表
 * 最新位置資訊
 * 在線 / 離線顯示
 * 5 秒輪詢最新定位 API
 * 受保護的監控路由，未登入使用者需導回登入頁
+* 若有 detail / filter / selection，互動對象應是 driver，而不是 vehicle
 
 ### 16.2 可延後
 
@@ -1023,12 +1045,13 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * `signal-kernel / async-runtime` 5 秒輪詢 `/vehicles/latest-locations`
 * request cancellation、stale / fresh / error state 與 manual refresh lifecycle
 * 顯示 online / offline 狀態
-* 可查看單車最近位置與時間
+* 以 tracked driver 為主顯示最近位置與時間
+* 不以 selected vehicle / vehicle row selection 作為主要互動模式
 
 #### 驗收標準
 
 * 可登入 web
-* operator 只能看到 visibility scope 內的 users / vehicles / latest locations
+* operator 只能看到 visibility scope 內的 users / tracking references / latest locations
 * 能看到位置資料隨輪詢刷新
 * 未登入使用者不可進入監控頁
 
@@ -1048,18 +1071,46 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * 每 10 秒讀取一次位置
 * 透過 MQTT over WebSocket publish 到 `gps/{vehicle_id}`
 * 顯示目前上拋狀態
+* 顯示目前 active tracking binding；不提供車輛切換流程
 
 #### 驗收標準
 
 * mobile 可登入
 * mobile 可持續送出 GPS 訊息
 * backend 可接收並寫入資料
-* web 可看到位置變化
+* web 可看到 driver / mobile tracking target 的位置變化
 * Mosquitto 對 Expo client 開放 MQTT over WebSocket
 
 ---
 
-### Phase 5：Integration / Demo Hardening
+### Phase 5：Domain / UI / Presence Cleanup
+
+#### 目標
+
+收斂 MVP domain 語意與 Web UI，避免第一版誤導成車機或車輛切換系統。
+
+#### 任務
+
+* 將文件與 UI 文案從 vehicle-centric 調整為 driver/mobile-centric
+* Web monitoring 以 tracked drivers 為主要列表
+* 移除 selected vehicle / vehicle row selection 互動
+* 保留 `vehicle_id` 作為 MVP tracking reference key，但在文件中標明其暫時性
+* 整合 shadcn/ui 作為 Web UI 基礎元件
+* 整合 Zustand 作為 Web 端內部狀態管理
+* 補充 device presence 設計方向：explicit offline event、MQTT Last Will、timeout fallback
+* 改善 Docker dev workflow，避免 web container 服務舊版 source
+
+#### 驗收標準
+
+* Web UI 不再暗示車輛切換
+* 監控頁可清楚呈現 driver / mobile tracking target 狀態
+* auth session 與 monitoring polling state 由 Zustand 管理
+* RFC / implementation plan 對 domain 語意保持一致
+* docker compose web 開發流程不容易吃到舊 image / 舊 source
+
+---
+
+### Phase 6：Integration / Demo Hardening
 
 #### 目標
 
@@ -1071,13 +1122,33 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 * `.env.example` 補齊
 * 基本錯誤處理
 * 啟動腳本整理
-* 測試帳號與測試車輛資料
+* 測試帳號與測試 tracking reference 資料
 * Demo 流程驗證
 
 #### 驗收標準
 
 * 新成員可照 README 啟動
 * mobile、backend、web、mqtt、postgres 全鏈路可運作
+
+---
+
+### Phase 7：Post-MVP Evolution Gate
+
+#### 目標
+
+在 MVP 可穩定 demo 後，再決定是否引入更重的即時與吞吐架構。
+
+#### 候選方向
+
+* Redis latest-location cache
+* Redis Stream / queue before PostgreSQL writes
+* ingestion worker consumer group
+* WebSocket / SSE invalidation
+* OpenAPI-generated TypeScript clients
+* per-device MQTT credentials / broker ACL
+* background location mode and offline queue
+* 5 秒或 1 秒高頻上拋
+* 多 driver / 多 tracking target demo load testing
 
 ---
 
@@ -1089,7 +1160,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 2. backend 可登入並提供查詢 API
 3. MQTT 訊息可被 backend 消費
 4. GPS payload 可正確寫入 `gps_history` 與 `gps_latest`
-5. web 可看到車輛最新位置
+5. web 可看到 driver / mobile tracking target 最新位置
 6. mobile 可每 10 秒上拋一次 GPS
 7. 在線 / 離線規則正確運作
 
@@ -1097,7 +1168,7 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 
 ## 19. Redis 擴充設計（僅保留，不實作）
 
-未來若車輛數量與頻率上升，預期加入 Redis 作為：
+未來若 tracked drivers / tracking targets 數量與頻率上升，預期加入 Redis 作為：
 
 * latest location cache
 * write buffer

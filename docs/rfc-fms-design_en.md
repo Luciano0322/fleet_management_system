@@ -1,9 +1,9 @@
-# RFC: General-Purpose Real-Time GPS Vehicle Location Platform MVP
+# RFC: General-Purpose Real-Time GPS Tracking Platform MVP
 
 **Status**: Draft
 **Target**: Agent Implementation RFC
-**Primary Goal**: Build a runnable, demoable, and incrementally extensible MVP for a real-time GPS vehicle location platform
-**Last Updated**: 2026-05-19
+**Primary Goal**: Build a runnable, demoable, and incrementally extensible MVP for a real-time GPS tracking platform
+**Last Updated**: 2026-06-12
 
 ---
 
@@ -34,7 +34,7 @@ This RFC asks the agent to implement an MVP that satisfies the following:
 1. Users can log in to the system.
 2. The mobile app can upload GPS data every 10 seconds after login.
 3. The backend can receive GPS messages through MQTT and write them to PostgreSQL.
-4. The web platform can show the latest vehicle locations and online status.
+4. The web platform can show the latest driver / mobile tracking target locations and online status.
 5. Platform-side services should be started through `docker-compose` as much as possible.
 6. The architecture should leave room for future Redis adoption and future 5-second or 1-second upload intervals.
 
@@ -58,7 +58,7 @@ The following are out of scope for the first phase:
 
 The first-phase product definition is:
 
-> **General-purpose real-time vehicle location and monitoring platform MVP**
+> **General-purpose real-time GPS tracking and monitoring platform MVP**
 
 It is not a full fleet ERP, and it is not a customized system for one vehicle category.
 
@@ -68,6 +68,8 @@ It should first prove that:
 * The backend data pipeline is clear and can keep running.
 * The web client can show the latest location and online status.
 * The system architecture can evolve smoothly toward higher traffic scenarios.
+
+The MVP monitoring subject is the **driver / mobile app instance**. The phone moves with the driver, so web-side switching, filtering, and status display should be driver-centric rather than vehicle-centric.
 
 ---
 
@@ -186,16 +188,18 @@ Initial roles:
 * `operator`
 * `driver`
 
-### 5.2 Vehicle / Device Basic Relationship
+### 5.2 Driver / Mobile / Tracking Reference Basic Relationship
 
 Required:
 
 * a user can log in
-* a driver can be bound to a vehicle
+* a driver uses the mobile app as the GPS upload client
 * one mobile app instance is treated as one uploading device
-* vehicles and users have a basic relationship model
+* the web monitoring subject is the driver / mobile tracking target
+* operators / admins may switch or filter between drivers; vehicles are not the first-version UI switching target
+* `vehicles` remains in the MVP as a tracking reference / compatibility table for the current GPS topic, latest-row key, and history lookup; it does not imply a first-version in-vehicle device or a vehicle-switching workflow
 * admin / operator monitoring users can monitor drivers through a basic user relationship
-* the web client can only see registered users, vehicles, and location data within the current JWT user's visibility scope
+* the web client can only see registered drivers, tracking references, and location data within the current JWT user's visibility scope
 
 ### 5.2.1 User Relationship / Visibility Scope
 
@@ -203,7 +207,7 @@ The MVP must preserve a basic user ownership / visibility relationship, but it d
 
 Definitions:
 
-* `admin`: can monitor all active users, vehicles, device bindings, and GPS data
+* `admin`: can monitor all active users, tracking references, device bindings, and GPS data
 * `operator`: can monitor only driver users assigned through active relationships
 * `driver`: can view only self and own device binding; GPS upload must also use the driver's own active binding
 
@@ -223,10 +227,11 @@ Required:
 
 Required:
 
-* show a vehicle list
-* show latest vehicle locations
-* show vehicle online / offline status
-* allow selecting a vehicle to view its latest upload time and location
+* show tracked drivers within the current visibility scope
+* show latest driver / mobile tracking target locations
+* show driver / mobile tracking target online / offline status
+* if detail views, filters, or selection are added, the interaction target should be the driver, not the vehicle
+* do not use vehicle row selection or a selected vehicle detail panel as the first-version primary interaction model
 
 ### 5.5 Dockerized Local Environment
 
@@ -294,7 +299,7 @@ To avoid overcomplicating the first version, web monitoring should use:
 
 Recommended polling interval:
 
-* vehicle list / latest location: every 5 seconds
+* tracked driver latest location: every 5 seconds
 
 Notes:
 
@@ -444,7 +449,7 @@ flowchart TD
 
 #### postgres
 
-* store users, vehicles, device bindings, latest locations, and historical locations
+* store users, tracking references, device bindings, latest locations, and historical locations
 
 #### mqtt
 
@@ -547,6 +552,13 @@ MVP rules:
 | created_at   | timestamptz |                 |
 | updated_at   | timestamptz |                 |
 
+MVP semantics:
+
+* `vehicles` currently acts as a **tracking reference** for the existing `vehicle_id` topic, `gps_latest` primary key, and history queries
+* the first-version web UI must not treat vehicles as the primary operation or switching target
+* there is no in-vehicle device concept in the current MVP; the GPS upload client is the driver's mobile app
+* if real vehicle assets, in-vehicle devices, dispatching, or driver vehicle switching are introduced later, a separate RFC must revise the domain model and API naming
+
 ### 11.3 device_bindings
 
 | field             | type        | note                   |
@@ -563,7 +575,10 @@ MVP rules:
 MVP constraints:
 
 * one `user_id + vehicle_id + device_identifier` can have only one active binding
-* the first version assumes that a vehicle has only one active mobile upload device at a time; if dual-device redundancy is needed later, a separate RFC must revise online status and conflict handling
+* the first version assumes that each driver uses their own mobile app as the active upload client
+* operators / admins can view or switch between different drivers in the web UI
+* the web UI does not provide vehicle switching; `vehicle_id` is only the current tracking reference key
+* if a driver needs multiple active tracking targets, dual-device redundancy, or simultaneous in-vehicle and mobile uploads later, a separate RFC must revise online status and conflict handling
 
 ### 11.4 user_relationships
 
@@ -612,7 +627,7 @@ MVP constraints:
 
 MVP indexes:
 
-* `gps_history(vehicle_id, recorded_at desc)`: supports per-vehicle route history queries
+* `gps_history(vehicle_id, recorded_at desc)`: supports per-tracking-reference route history queries
 * `gps_latest(vehicle_id)`: provided by the primary key
 * `device_bindings(user_id, vehicle_id, device_identifier, status)`: supports MQTT payload validation
 * `user_relationships(parent_user_id, child_user_id, status)`: supports web monitoring visibility scope queries
@@ -702,11 +717,15 @@ Response:
 
 #### `GET /vehicles`
 
-Purpose: fetch the vehicle list within the current JWT user's visibility scope.
+Purpose: fetch tracking references within the current JWT user's visibility scope.
+
+Note: this endpoint name follows the current `vehicles` table. The web UI should not present it as a vehicle-switching workflow. The first-version monitoring target remains the driver / mobile tracking target.
 
 #### `GET /vehicles/latest-locations`
 
-Purpose: fetch latest vehicle locations within the current JWT user's visibility scope, used by the web monitoring page.
+Purpose: fetch latest tracked driver locations within the current JWT user's visibility scope, used by the web monitoring page.
+
+Note: the response still includes `vehicle_id` / `plate_number` as the MVP tracking reference, but UI presentation should be centered on `driver_user_id` / `driver_account`.
 
 Response example:
 
@@ -727,7 +746,7 @@ Response example:
 
 #### `GET /vehicles/{vehicle_id}/history?from=...&to=...`
 
-Purpose: fetch the historical route for one vehicle within the current JWT user's visibility scope.
+Purpose: fetch the historical route for one tracking reference within the current JWT user's visibility scope.
 
 ---
 
@@ -749,7 +768,9 @@ MVP rules:
 
 #### `GET /me/device-binding`
 
-Purpose: allow the mobile app to fetch the currently bound vehicle.
+Purpose: allow the mobile app to fetch the current driver's active tracking binding.
+
+Note: the first-version mobile app does not need to provide vehicle switching. After driver login, the app uploads GPS through that driver's active binding. If multiple active tracking targets are allowed for one driver later, add a plural API such as `GET /me/device-bindings` and make the mobile app choose the upload target explicitly.
 
 ### 12.5 Visibility Scope Rules
 
@@ -837,7 +858,7 @@ Non-goals:
 * automatic broker ACL synchronization is not required in the first version
 * mTLS is not required in the first version
 
-Before productionization, per-device credentials or broker ACLs must be added to prevent a device from publishing to a topic for an unbound vehicle.
+Before productionization, per-device credentials or broker ACLs must be added to prevent a device from publishing to a topic for an unbound tracking reference.
 
 ---
 
@@ -845,8 +866,8 @@ Before productionization, per-device credentials or broker ACLs must be added to
 
 The MVP uses a simple rule:
 
-* if `last_seen_at` is **less than or equal to 30 seconds** from now, the vehicle is `online`
-* if it is more than 30 seconds, the vehicle is `offline`
+* if `last_seen_at` is **less than or equal to 30 seconds** from now, the tracking target is `online`
+* if it is more than 30 seconds, the tracking target is `offline`
 
 Notes:
 
@@ -867,7 +888,7 @@ Notes:
 
 ### 15.2 Optional but Valuable
 
-* show currently bound vehicle
+* show the current active tracking binding
 * show current upload status
 * show latest upload time
 * simple failure retry
@@ -900,11 +921,12 @@ over WebSocket on `9001` for the Expo mobile app.
 * login page
 * monitoring home page
 * registered users within the current visibility scope
-* vehicle list
+* tracked driver list
 * latest location information
 * online / offline display
 * 5-second polling for the latest location interface
 * protected monitoring route that redirects unauthenticated users to login
+* if detail views, filters, or selection are added, the interaction target should be the driver, not the vehicle
 
 ### 16.2 Can Be Deferred
 
@@ -1026,12 +1048,13 @@ Build the minimal monitoring platform.
 * 5-second `signal-kernel / async-runtime` polling of `/vehicles/latest-locations`
 * request cancellation, stale / fresh / error state, and manual refresh lifecycle
 * show online / offline status
-* allow viewing one vehicle's latest location and time
+* show latest location and time centered on tracked drivers
+* do not use selected vehicle / vehicle row selection as the primary interaction model
 
 #### Acceptance Criteria
 
 * user can log in through the web
-* operator can see only users / vehicles / latest locations within their visibility scope
+* operator can see only users / tracking references / latest locations within their visibility scope
 * location data refreshes through polling
 * unauthenticated users cannot enter the monitoring page
 
@@ -1051,18 +1074,46 @@ Build the GPS upload client.
 * read location every 10 seconds
 * publish to `gps/{vehicle_id}` through MQTT over WebSocket
 * show current upload status
+* show the current active tracking binding; do not provide a vehicle-switching flow
 
 #### Acceptance Criteria
 
 * mobile app can log in
 * mobile app can continuously send GPS messages
 * backend can receive and write the data
-* web can show changing locations
+* web can show changing driver / mobile tracking target locations
 * Mosquitto exposes MQTT over WebSocket for Expo clients
 
 ---
 
-### Phase 5: Integration / Demo Hardening
+### Phase 5: Domain / UI / Presence Cleanup
+
+#### Goal
+
+Align the MVP domain language and web UI so the first version is not mistaken for an in-vehicle-device or vehicle-switching system.
+
+#### Tasks
+
+* shift documentation and UI copy from vehicle-centric to driver/mobile-centric language
+* make tracked drivers the primary web monitoring list
+* remove selected vehicle / vehicle row selection interactions
+* keep `vehicle_id` as the MVP tracking reference key, but document that it is temporary
+* integrate shadcn/ui as the web UI component baseline
+* integrate Zustand for web-side internal state management
+* document the device presence direction: explicit offline event, MQTT Last Will, timeout fallback
+* improve the Docker dev workflow so the web container does not serve stale source
+
+#### Acceptance Criteria
+
+* the web UI no longer implies vehicle switching
+* the monitoring page clearly presents driver / mobile tracking target state
+* auth session and monitoring polling state are managed through Zustand
+* RFC and implementation plan use consistent domain language
+* docker compose web development does not easily serve a stale image or stale source
+
+---
+
+### Phase 6: Integration / Demo Hardening
 
 #### Goal
 
@@ -1074,13 +1125,33 @@ Complete a demoable MVP.
 * complete `.env.example`
 * add basic error handling
 * organize startup scripts
-* add test accounts and test vehicles
+* add test accounts and test tracking reference data
 * verify the demo flow
 
 #### Acceptance Criteria
 
 * a new team member can start the system by following README
 * mobile, backend, web, mqtt, and postgres all work through the full pipeline
+
+---
+
+### Phase 7: Post-MVP Evolution Gate
+
+#### Goal
+
+Decide whether to introduce heavier realtime and throughput architecture only after the MVP is demo-stable.
+
+#### Candidate Directions
+
+* Redis latest-location cache
+* Redis Stream / queue before PostgreSQL writes
+* ingestion worker consumer group
+* WebSocket / SSE invalidation
+* OpenAPI-generated TypeScript clients
+* per-device MQTT credentials / broker ACL
+* background location mode and offline queue
+* 5-second or 1-second high-frequency uploads
+* multi-driver / multi-tracking-target demo load testing
 
 ---
 
@@ -1092,7 +1163,7 @@ The minimum completion criteria for this RFC are:
 2. backend supports login and query interfaces.
 3. MQTT messages can be consumed by the backend.
 4. GPS payloads are correctly written to `gps_history` and `gps_latest`.
-5. web can show latest vehicle locations.
+5. web can show latest driver / mobile tracking target locations.
 6. mobile can upload GPS every 10 seconds.
 7. online / offline rules work correctly.
 
@@ -1100,7 +1171,7 @@ The minimum completion criteria for this RFC are:
 
 ## 19. Redis Extension Design, Reserved Only
 
-If vehicle count and upload frequency increase later, Redis is expected to be introduced for:
+If tracked driver / tracking target count and upload frequency increase later, Redis is expected to be introduced for:
 
 * latest location cache
 * write buffer
@@ -1146,4 +1217,4 @@ During implementation, the agent must follow these restrictions:
 
 ## 21. One-Sentence Summary
 
-> Use FastAPI + TanStack Start + React Native + PostgreSQL + MQTT, start platform-side services through docker-compose, complete a general-purpose location platform MVP that uploads GPS every 10 seconds and shows real-time vehicle locations on the web, while preserving an evolution path for Redis and higher-frequency location updates.
+> Use FastAPI + TanStack Start + React Native + PostgreSQL + MQTT, start platform-side services through docker-compose, complete a general-purpose GPS tracking MVP that uploads GPS every 10 seconds and shows real-time driver / mobile tracking target locations on the web, while preserving an evolution path for Redis and higher-frequency location updates.
