@@ -1138,6 +1138,14 @@ TanStack Query 是一般團隊產品中管理 server state 與 polling 的合理
 
 在 MVP 可穩定 demo 後，再決定是否引入更重的即時與吞吐架構。
 
+#### Gate 結果
+
+Phase 7 決策記錄在 [post-mvp-evolution-gate_zhTW.md](./post-mvp-evolution-gate_zhTW.md)。
+
+目前決策是維持 MVP 架構不變，延後 Redis / WebSocket / SSE / high-frequency
+uploads，下一步優先做 presence hardening：explicit offline event、MQTT Last
+Will、timeout fallback。
+
 #### 候選方向
 
 * Redis latest-location cache

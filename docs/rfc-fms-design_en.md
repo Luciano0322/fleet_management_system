@@ -1141,6 +1141,14 @@ Complete a demoable MVP.
 
 Decide whether to introduce heavier realtime and throughput architecture only after the MVP is demo-stable.
 
+#### Gate Result
+
+The Phase 7 decision is recorded in [post-mvp-evolution-gate_en.md](./post-mvp-evolution-gate_en.md).
+
+The current decision is to keep the MVP architecture unchanged, defer Redis /
+WebSocket / SSE / high-frequency uploads, and prioritize presence hardening
+next: explicit offline event, MQTT Last Will, and timeout fallback.
+
 #### Candidate Directions
 
 * Redis latest-location cache

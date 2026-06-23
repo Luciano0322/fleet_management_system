@@ -573,6 +573,14 @@ Consider these only after Phase 6 is complete:
 * operational need for live invalidation instead of polling
 * security requirements for production MQTT access
 
+### Phase 7 Implementation Notes
+
+* Added [post-mvp-evolution-gate_en.md](./post-mvp-evolution-gate_en.md) and [post-mvp-evolution-gate_zhTW.md](./post-mvp-evolution-gate_zhTW.md).
+* Current gate decision: keep the MVP architecture unchanged.
+* Defer Redis, WebSocket / SSE, one-second uploads, broker ACL synchronization, and background mobile queues.
+* Prioritize presence hardening next: explicit offline event, MQTT Last Will, timeout fallback.
+* Require a repeatable load baseline before introducing Redis Stream, ingestion workers, or high-frequency uploads.
+
 ---
 
 ## 11. Suggested First Implementation Slice

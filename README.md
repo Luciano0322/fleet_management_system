@@ -249,6 +249,20 @@ cd ../..
 docker compose config
 ```
 
+## Phase 7 Post-MVP Evolution Gate
+
+The Phase 7 decision is documented in:
+
+- [English evolution gate](./docs/post-mvp-evolution-gate_en.md)
+- [Traditional Chinese evolution gate](./docs/post-mvp-evolution-gate_zhTW.md)
+
+Current decision:
+
+- keep the MVP architecture unchanged
+- do not add Redis, WebSocket / SSE, one-second uploads, broker ACL sync, or background queues yet
+- implement presence hardening next if development continues
+- measure load before adding Redis Stream, ingestion workers, or high-frequency upload cadence
+
 ## Useful Commands
 
 ```sh
