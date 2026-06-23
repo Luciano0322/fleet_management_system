@@ -1,4 +1,4 @@
-# Implementation Plan: Real-Time GPS Vehicle Location Platform MVP
+# Implementation Plan: Real-Time GPS Tracking Platform MVP
 
 **Source RFC**: [rfc-fms-design_en.md](./rfc-fms-design_en.md)  
 **Status**: Draft  
@@ -16,8 +16,12 @@ This plan follows the RFC's vertical tracer bullet rule:
 * FastAPI remains the only business backend
 * JWT auth controls both identity and visibility scope
 * basic `user_relationships` define which driver users an operator can monitor
+* the MVP monitoring subject is the driver / mobile app tracking target
+* `vehicles` remains a temporary tracking reference table and API compatibility layer
 * TanStack Start is used for the web shell, routing, auth guard, and UI rendering only
 * `signal-kernel / async-runtime` manages web monitoring polling, cancellation, stale / fresh / error state, and refresh lifecycle
+* shadcn/ui provides the web component baseline
+* Zustand manages web-side auth session state and monitoring runtime state
 * TanStack Query is a valid production-standard alternative, but it is not the primary polling runtime for this MVP
 * Redis, WebSocket, SSE, multi-tenancy, dispatching, reports, and production-grade background mobile tracking stay out of the MVP
 
@@ -29,6 +33,7 @@ compose scaffold
   -> MQTT ingestion
   -> web monitoring
   -> mobile uploader
+  -> domain / UI / presence cleanup
   -> full demo hardening
 ```
 
@@ -43,8 +48,9 @@ compose scaffold
 | 2 | GPS Ingestion | MQTT messages write `gps_history`, upsert `gps_latest`, and update `last_seen_at` | Phase 1 |
 | 3 | TanStack Start Monitoring Web | Web login and latest-location polling work | Phase 1, Phase 2 for live data |
 | 4 | React Native Mobile Uploader | Mobile can log in and publish GPS every 10 seconds | Phase 1, Phase 2 |
-| 5 | Integration and Demo Hardening | Full mobile -> MQTT -> backend -> DB -> web flow is demoable | Phases 0-4 |
-| 6 | Post-MVP Evolution Gate | Decide whether to introduce Redis, push updates, or higher-frequency uploads | Phase 5 |
+| 5 | Domain / UI / Presence Cleanup | Driver/mobile-centered UI, presence direction, and stable web dev workflow are aligned | Phases 0-4 |
+| 6 | Integration and Demo Hardening | Full mobile -> MQTT -> backend -> DB -> web flow is demoable | Phase 5 |
+| 7 | Post-MVP Evolution Gate | Decide whether to introduce Redis, push updates, or higher-frequency uploads | Phase 6 |
 
 ---
 
@@ -266,11 +272,12 @@ Build the web monitoring experience on top of FastAPI HTTP interfaces.
 * Add auth guard that redirects unauthenticated users to login.
 * Build monitoring page:
   * visible registered users
-  * vehicle list
+  * tracked driver / mobile tracking target list
+  * tracking reference label for the current MVP data key
   * latest latitude / longitude
   * latest recorded time
   * online / offline status
-  * selected vehicle detail panel
+  * no selected vehicle detail panel or vehicle row selection interaction
 * Poll `GET /vehicles/latest-locations` every 5 seconds through `signal-kernel / async-runtime`.
 * Model request cancellation, stale / fresh / error state, and manual refresh lifecycle explicitly.
 * Add loading, empty, and error states.
@@ -280,8 +287,8 @@ Build the web monitoring experience on top of FastAPI HTTP interfaces.
 
 * User can log in through the web app.
 * Unauthenticated users cannot access the monitoring route.
-* Operators see only registered users, vehicles, and latest locations inside their visibility scope.
-* Monitoring page shows vehicles from FastAPI.
+* Operators see only registered users, tracking references, and latest locations inside their visibility scope.
+* Monitoring page presents tracked drivers / mobile tracking targets from FastAPI data.
 * Latest locations refresh every 5 seconds.
 * Online / offline status follows the 30-second rule from backend data.
 * The web runtime does not directly connect to Postgres or MQTT.
@@ -340,7 +347,7 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 * Read foreground location every 10 seconds.
 * Publish GPS payload to `gps/{vehicle_id}` through MQTT over WebSocket.
 * Display:
-  * bound vehicle
+  * current active tracking binding
   * upload enabled / disabled state
   * latest upload time
   * latest publish success / failure
@@ -353,7 +360,7 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 * Mobile app asks for location permission.
 * Mobile app publishes GPS payload every 10 seconds while active.
 * Backend accepts valid mobile GPS messages.
-* Web monitoring page shows changing location data.
+* Web monitoring page shows changing driver / mobile tracking target data.
 * Mosquitto exposes TCP MQTT on `1883` and MQTT over WebSocket on `9001`.
 
 ### Verification
@@ -389,7 +396,93 @@ Build the mobile foreground GPS uploader that proves the real device-side path.
 
 ---
 
-## 8. Phase 5: Integration and Demo Hardening
+## 8. Phase 5: Domain / UI / Presence Cleanup
+
+### Goal
+
+Align the MVP domain language and web UI so the first version is clearly a
+driver / mobile tracking system, not a vehicle-switching or in-vehicle-device
+system.
+
+### Tasks
+
+* Shift documentation and UI copy from vehicle-centric to driver/mobile-centric language.
+* Make tracked drivers / mobile tracking targets the primary web monitoring list.
+* Remove selected vehicle detail and vehicle row selection interactions from the web UI.
+* Keep `vehicle_id` as the MVP tracking reference key, but document that it is temporary.
+* Integrate shadcn/ui as the web UI component baseline.
+* Integrate Zustand for web-side auth session state and monitoring runtime state.
+* Document the device presence direction:
+  * explicit offline event for graceful mobile stop / sign-out
+  * MQTT Last Will for abnormal MQTT disconnect
+  * timeout fallback based on `last_seen_at`
+* Improve the Docker web development workflow so local source changes do not require guessing whether the container is stale.
+
+### Acceptance Criteria
+
+* Web UI no longer implies vehicle switching.
+* Monitoring page clearly presents tracked driver / mobile tracking target status.
+* Table rows are passive display rows; only explicit controls such as refresh, sign-out, and coordinate copy are buttons.
+* Auth session and monitoring polling state are managed through Zustand.
+* shadcn/ui components are available as the web component baseline.
+* README and implementation plan describe `vehicle_id` as a tracking reference, not a first-version vehicle switching target.
+* Device presence has a documented near-term path beyond the current timeout-only rule.
+* Docker compose web development mounts local source/config so ordinary UI edits hot reload.
+
+### Verification
+
+* Run web typecheck/build.
+* Start or refresh compose web service.
+* Confirm `/monitoring` shows tracked users instead of vehicle selection.
+* Confirm coordinate copy remains the only row-level action.
+* Update docs and README references.
+* Run `docker compose config` after compose changes.
+
+### Phase 5 Implementation Notes
+
+* The web UI now uses shadcn/ui primitives under `apps/web/src/components/ui`.
+* Auth state is held in `apps/web/src/stores/authSessionStore.ts`.
+* Monitoring state is held in `apps/web/src/stores/monitoringStore.ts`.
+* `apps/web/src/lib/monitoringRuntime.ts` now keeps only runtime types and helpers.
+* The monitoring table is centered on tracked users and tracking references.
+* The table does not use row-level buttons or selection state.
+* The copy coordinates button is the explicit interaction for coordinate values.
+* The Docker web service bind-mounts local `src`, `components.json`, `tsconfig.json`, and `vite.config.ts` for dev hot reload.
+* Package or dependency changes still require a web image rebuild and container recreation.
+
+### Presence Direction
+
+The current backend online status remains timeout-based: if the latest
+`last_seen_at` is within the configured threshold, the tracking target is
+`online`; otherwise it is `offline`.
+
+The next presence iteration should layer explicit signals on top of this rule:
+
+```text
+mobile graceful stop / sign-out
+  -> explicit offline event
+
+MQTT abnormal disconnect
+  -> broker Last Will offline event
+
+missing events or dropped network
+  -> timeout fallback from last_seen_at
+```
+
+The API should continue to return a snapshot status to the web client. The web
+client should not own the source-of-truth online/offline decision; it should poll
+or refetch backend snapshots.
+
+### Do Not Do Yet
+
+* Do not rename backend tables or endpoints only for presentation.
+* Do not implement production MQTT ACL synchronization.
+* Do not replace polling with WebSocket / SSE in this phase.
+* Do not add Redis just for presence.
+
+---
+
+## 9. Phase 6: Integration and Demo Hardening
 
 ### Goal
 
@@ -406,7 +499,7 @@ Make the MVP reliable enough for a new developer or stakeholder demo.
   * manual MQTT publish flow
   * mobile connection notes
 * Complete `.env.example`.
-* Add demo seed credentials and vehicle identifiers.
+* Add demo seed credentials and tracking reference identifiers.
 * Add smoke scripts for:
   * backend health
   * login
@@ -441,7 +534,7 @@ Make the MVP reliable enough for a new developer or stakeholder demo.
 
 ---
 
-## 9. Phase 6: Post-MVP Evolution Gate
+## 10. Phase 7: Post-MVP Evolution Gate
 
 ### Goal
 
@@ -457,13 +550,13 @@ Make an explicit decision after the MVP is working, instead of adding future arc
 * Per-device MQTT credentials or broker ACL synchronization.
 * Background location mode and offline queue for mobile.
 * Higher-frequency uploads, first 5 seconds, then 1 second.
-* Multi-vehicle demo load testing.
+* Multi-driver / multi-tracking-target demo load testing.
 
 ### Decision Criteria
 
-Consider these only after Phase 5 is complete:
+Consider these only after Phase 6 is complete:
 
-* number of vehicles in target demos
+* number of tracked drivers / tracking targets in target demos
 * acceptable location latency
 * observed Postgres write pressure
 * number of pending or retried GPS messages during load tests
@@ -474,7 +567,7 @@ Consider these only after Phase 5 is complete:
 
 ---
 
-## 10. Suggested First Implementation Slice
+## 11. Suggested First Implementation Slice
 
 The first implementation slice should be:
 
@@ -486,7 +579,7 @@ This proves the repo and runtime shape before investing in auth, database migrat
 
 ---
 
-## 11. Open Questions Before Coding
+## 12. Open Questions Before Coding
 
 These do not block Phase 0, but should be resolved before or during Phase 1:
 

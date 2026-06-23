@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
-COPY tsconfig.json vite.config.ts ./
+COPY components.json tsconfig.json vite.config.ts ./
 COPY src ./src
 
 EXPOSE 3000

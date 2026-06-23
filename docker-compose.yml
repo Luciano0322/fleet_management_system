@@ -61,9 +61,15 @@ services:
     build:
       context: ./apps/web
     environment:
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
     ports:
       - "${WEB_PORT:-3000}:3000"
+    volumes:
+      - ./apps/web/src:/app/src
+      - ./apps/web/components.json:/app/components.json:ro
+      - ./apps/web/tsconfig.json:/app/tsconfig.json:ro
+      - ./apps/web/vite.config.ts:/app/vite.config.ts:ro
     depends_on:
       - backend
 

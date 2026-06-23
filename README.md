@@ -1,6 +1,6 @@
 # Fleet Management System
 
-General-purpose real-time GPS vehicle location platform MVP.
+General-purpose real-time GPS tracking platform MVP.
 
 ## Phase 0 Runtime
 
@@ -64,8 +64,8 @@ operator001
 driver001
 ```
 
-The seed relationship is `operator001 -> driver001`, with one active vehicle
-`ABC-1234` and device binding `demo-device-001`.
+The seed relationship is `operator001 -> driver001`, with one active tracking
+reference `ABC-1234` and device binding `demo-device-001`.
 
 Auth returns an access / refresh token pair:
 
@@ -76,7 +76,8 @@ Auth returns an access / refresh token pair:
 ## Phase 2 GPS Ingestion Demo
 
 The backend subscribes to MQTT topic `gps/+` in compose and validates each GPS
-message against the registered driver, vehicle, and active device binding.
+message against the registered driver, tracking reference, and active device
+binding.
 
 Publish one demo GPS message:
 
@@ -96,8 +97,8 @@ curl -s http://localhost:8000/vehicles/latest-locations \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-The seed vehicle should report the published latitude / longitude and become
-`online` for 30 seconds after ingestion.
+The seed tracking target should report the published latitude / longitude and
+become `online` for 30 seconds after ingestion.
 
 ## Phase 3 Web Monitoring
 
@@ -114,14 +115,18 @@ tokens through `/auth/refresh`, and revokes the refresh token on sign-out.
 The page displays:
 
 - visible users within the current JWT user's scope
-- visible vehicles
+- tracked users / mobile tracking targets
+- tracking reference labels for the current MVP data key
 - latest latitude / longitude
 - latest recorded time
 - backend-derived online / offline status
-- selected vehicle details
 
 Latest locations are polled every 5 seconds through the web monitoring runtime
 adapter under `apps/web/src/lib/monitoringRuntime.ts`.
+
+The first-version UI does not provide vehicle switching. The `vehicle_id` /
+plate number values are still present because the current API and MQTT topic use
+them as tracking reference keys.
 
 ## Phase 4 Mobile GPS Uploader
 
@@ -151,6 +156,39 @@ ws://localhost:9001
 For Android emulator the app falls back to `10.0.2.2`. For a physical device,
 set `EXPO_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_MQTT_WS_URL` in
 `apps/mobile/.env` to your computer's LAN IP address.
+
+## Phase 5 Domain / UI / Presence Cleanup
+
+The monitoring UI is driver/mobile-centric:
+
+- tracked users are the primary list
+- table rows are display rows, not row-level buttons
+- coordinate copy is an explicit button
+- web auth session and monitoring polling state are managed with Zustand
+- shadcn/ui components are the web UI baseline
+
+The current online/offline result is still computed by the backend snapshot from
+`last_seen_at`. The planned presence path is explicit mobile offline events for
+graceful stops, MQTT Last Will for abnormal disconnects, and timeout fallback
+for missing signals.
+
+## Docker Web Development Notes
+
+The web service bind-mounts local source/config files for development, so normal
+changes under `apps/web/src` should hot reload in the running container.
+
+If package dependencies or Dockerfile inputs change, rebuild and recreate the web
+container:
+
+```sh
+docker compose up -d --build --force-recreate web
+```
+
+If the browser appears stale, confirm the container has the expected source:
+
+```sh
+docker compose exec web grep -n "Live tracking status" /app/src/routes/monitoring.tsx
+```
 
 ## Useful Commands
 

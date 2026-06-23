@@ -35,11 +35,11 @@ export const Route = createFileRoute('/monitoring')({
   component: MonitoringPage,
 })
 
-type FleetRow = {
-  vehicleId: string
-  plateNumber: string
+type TrackingRow = {
+  trackingRefId: string
+  trackingRefLabel: string
   name: string | null
-  vehicleStatus: string
+  trackingRefStatus: string
   driverAccount: string | null
   onlineStatus: string
   latitude: number | null
@@ -55,7 +55,9 @@ function MonitoringPage() {
   const { hydrated, session } = useAuthSession()
   const { state, refreshNow } = useMonitoringRuntime(Boolean(session))
   const [isLoggingOut, setIsLoggingOut] = useState(false)
-  const [copiedVehicleId, setCopiedVehicleId] = useState<string | null>(null)
+  const [copiedTrackingRefId, setCopiedTrackingRefId] = useState<string | null>(
+    null,
+  )
 
   useEffect(() => {
     if (hydrated && !session) {
@@ -63,18 +65,18 @@ function MonitoringPage() {
     }
   }, [hydrated, navigate, session])
 
-  const fleetRows = useMemo(() => {
-    const latestByVehicle = new Map(
+  const trackingRows = useMemo(() => {
+    const latestByTrackingRef = new Map(
       state.latestLocations.map((location) => [location.vehicle_id, location]),
     )
 
-    const rowsFromVehicles = state.vehicles.map((vehicle) => {
-      const latest = latestByVehicle.get(vehicle.id)
+    const rowsFromTrackingRefs = state.vehicles.map((vehicle) => {
+      const latest = latestByTrackingRef.get(vehicle.id)
       return {
-        vehicleId: vehicle.id,
-        plateNumber: vehicle.plate_number,
+        trackingRefId: vehicle.id,
+        trackingRefLabel: vehicle.plate_number,
         name: vehicle.name,
-        vehicleStatus: vehicle.status,
+        trackingRefStatus: vehicle.status,
         driverAccount: latest?.driver_account ?? null,
         onlineStatus: latest?.online_status ?? 'offline',
         latitude: latest?.latitude ?? null,
@@ -83,19 +85,21 @@ function MonitoringPage() {
         heading: latest?.heading ?? null,
         recordedAt: latest?.recorded_at ?? null,
         lastSeenAt: latest?.last_seen_at ?? null,
-      } satisfies FleetRow
+      } satisfies TrackingRow
     })
 
-    const knownVehicleIds = new Set(rowsFromVehicles.map((row) => row.vehicleId))
+    const knownTrackingRefIds = new Set(
+      rowsFromTrackingRefs.map((row) => row.trackingRefId),
+    )
     const latestOnlyRows = state.latestLocations
-      .filter((location) => !knownVehicleIds.has(location.vehicle_id))
+      .filter((location) => !knownTrackingRefIds.has(location.vehicle_id))
       .map(
         (location) =>
           ({
-            vehicleId: location.vehicle_id,
-            plateNumber: location.plate_number,
+            trackingRefId: location.vehicle_id,
+            trackingRefLabel: location.plate_number,
             name: null,
-            vehicleStatus: 'active',
+            trackingRefStatus: 'active',
             driverAccount: location.driver_account,
             onlineStatus: location.online_status,
             latitude: location.latitude,
@@ -104,11 +108,11 @@ function MonitoringPage() {
             heading: location.heading,
             recordedAt: location.recorded_at,
             lastSeenAt: location.last_seen_at,
-          }) satisfies FleetRow,
+          }) satisfies TrackingRow,
       )
 
-    return [...rowsFromVehicles, ...latestOnlyRows].sort((a, b) =>
-      a.plateNumber.localeCompare(b.plateNumber),
+    return [...rowsFromTrackingRefs, ...latestOnlyRows].sort((a, b) =>
+      a.trackingRefLabel.localeCompare(b.trackingRefLabel),
     )
   }, [state.latestLocations, state.vehicles])
 
@@ -122,17 +126,17 @@ function MonitoringPage() {
     }
   }
 
-  async function handleCopyCoordinates(row: FleetRow) {
+  async function handleCopyCoordinates(row: TrackingRow) {
     const coordinates = formatCoordinates(row.latitude, row.longitude)
     if (!hasCoordinates(row)) {
       return
     }
 
     await copyTextToClipboard(coordinates)
-    setCopiedVehicleId(row.vehicleId)
+    setCopiedTrackingRefId(row.trackingRefId)
     window.setTimeout(() => {
-      setCopiedVehicleId((current) =>
-        current === row.vehicleId ? null : current,
+      setCopiedTrackingRefId((current) =>
+        current === row.trackingRefId ? null : current,
       )
     }, 1800)
   }
@@ -250,13 +254,13 @@ function MonitoringPage() {
             <CardHeader className="border-b py-4">
               <CardTitle className="flex items-center justify-between">
                 Tracked users
-                <Badge variant="secondary">{fleetRows.length}</Badge>
+                <Badge variant="secondary">{trackingRows.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               {isInitialLoading ? (
-                <VehicleTableSkeleton />
-              ) : fleetRows.length > 0 ? (
+                <TrackingTableSkeleton />
+              ) : trackingRows.length > 0 ? (
                 <Table className="min-w-[860px]">
                   <TableHeader>
                     <TableRow>
@@ -269,20 +273,20 @@ function MonitoringPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {fleetRows.map((row) => (
-                      <TableRow key={row.vehicleId}>
+                    {trackingRows.map((row) => (
+                      <TableRow key={row.trackingRefId}>
                         <TableCell>
                           <div className="grid gap-0.5">
                             <span className="font-medium">
                               {row.driverAccount ?? 'Unassigned'}
                             </span>
                             <span className="text-xs text-muted-foreground">
-                              {row.name ?? row.plateNumber}
+                              {row.name ?? row.trackingRefLabel}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground">
-                          {row.plateNumber}
+                          {row.trackingRefLabel}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={row.onlineStatus} />
@@ -293,7 +297,7 @@ function MonitoringPage() {
                               {formatCoordinates(row.latitude, row.longitude)}
                             </span>
                             <CopyCoordinatesButton
-                              copied={copiedVehicleId === row.vehicleId}
+                              copied={copiedTrackingRefId === row.trackingRefId}
                               disabled={!hasCoordinates(row)}
                               onCopy={(event) => {
                                 event.stopPropagation()
@@ -370,7 +374,7 @@ function CopyCoordinatesButton({
   )
 }
 
-function VehicleTableSkeleton() {
+function TrackingTableSkeleton() {
   return (
     <div className="grid gap-3 p-4">
       {Array.from({ length: 5 }).map((_, index) => (
@@ -390,7 +394,7 @@ function freshnessBadgeClass(freshness: string): string {
   return 'border-neutral-200 bg-neutral-100 text-neutral-700'
 }
 
-function hasCoordinates(row: FleetRow): boolean {
+function hasCoordinates(row: TrackingRow): boolean {
   return row.latitude !== null && row.longitude !== null
 }
 
@@ -402,10 +406,6 @@ function formatCoordinates(
     return 'No location'
   }
   return `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`
-}
-
-function formatNumber(value: number | null): string {
-  return value === null ? 'No data' : value.toFixed(6)
 }
 
 function formatDateTime(value: string | null): string {
