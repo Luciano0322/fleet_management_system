@@ -526,6 +526,14 @@ Make the MVP reliable enough for a new developer or stakeholder demo.
 * Run web lint/typecheck/build.
 * Complete manual demo checklist.
 
+### Phase 6 Implementation Notes
+
+* Added `infra/scripts/setup-demo-data.sh` for repeatable Alembic migration and seed setup.
+* Added `infra/scripts/smoke-demo.sh` for platform-side health, login, latest-location, MQTT publish, and post-publish latest-location checks.
+* `infra/scripts/publish-demo-gps.sh` supports MQTT host / port overrides while keeping seed defaults.
+* `.env.example` now includes demo account, user ID, tracking reference, and device identifier values.
+* README now includes the fastest demo path, smoke command, and manual demo checklist.
+
 ### Do Not Do Yet
 
 * Do not add production observability stack.

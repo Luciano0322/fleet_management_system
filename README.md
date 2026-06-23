@@ -27,6 +27,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
+In a second terminal, apply migrations and seed the demo data:
+
+```sh
+sh infra/scripts/setup-demo-data.sh
+```
+
 The default local endpoints are:
 
 - Backend health: `http://localhost:8000/health`
@@ -54,6 +60,12 @@ After the compose services are running, initialize the backend schema and seed d
 ```sh
 docker compose exec backend alembic upgrade head
 docker compose exec backend python -m app.seed
+```
+
+The repeatable helper is:
+
+```sh
+sh infra/scripts/setup-demo-data.sh
 ```
 
 Seed web/API accounts all use `password123`:
@@ -99,6 +111,19 @@ curl -s http://localhost:8000/vehicles/latest-locations \
 
 The seed tracking target should report the published latitude / longitude and
 become `online` for 30 seconds after ingestion.
+
+The end-to-end smoke helper runs health, login, latest-location, MQTT publish,
+and post-publish latest-location checks:
+
+```sh
+sh infra/scripts/smoke-demo.sh
+```
+
+If migrations and seed data are already prepared, skip that part:
+
+```sh
+RUN_SETUP=false sh infra/scripts/smoke-demo.sh
+```
 
 ## Phase 3 Web Monitoring
 
@@ -190,6 +215,40 @@ If the browser appears stale, confirm the container has the expected source:
 docker compose exec web grep -n "Live tracking status" /app/src/routes/monitoring.tsx
 ```
 
+## Phase 6 Demo Hardening
+
+The fastest platform-side verification path is:
+
+```sh
+cp .env.example .env
+docker compose up -d --build
+sh infra/scripts/smoke-demo.sh
+```
+
+Demo checklist:
+
+- `docker compose ps` shows `postgres`, `mqtt`, `backend`, and `web` running
+- `sh infra/scripts/setup-demo-data.sh` completes without errors
+- `sh infra/scripts/smoke-demo.sh` prints `Smoke demo passed.`
+- web login works at `http://localhost:3000` with `operator001 / password123`
+- monitoring shows `driver001` with tracking ref `ABC-1234`
+- `sh infra/scripts/publish-demo-gps.sh` updates the latest location
+- mobile Expo app logs in with `driver001 / password123`
+- mobile upload changes are visible in the web monitoring page after polling
+
+Core verification commands:
+
+```sh
+docker compose exec -e MQTT_INGESTION_ENABLED=false backend pytest
+cd apps/web
+npm run typecheck
+npm run build
+cd ../mobile
+npm run typecheck
+cd ../..
+docker compose config
+```
+
 ## Useful Commands
 
 ```sh
@@ -197,6 +256,8 @@ docker compose ps
 docker compose logs -f backend
 docker compose logs -f web
 docker compose logs -f mqtt
+sh infra/scripts/setup-demo-data.sh
+sh infra/scripts/smoke-demo.sh
 docker compose exec -e MQTT_INGESTION_ENABLED=false backend pytest
 cd apps/web
 npm run typecheck

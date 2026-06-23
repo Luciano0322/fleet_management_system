@@ -45,7 +45,7 @@ The app supports foreground-only uploads:
 - fetch the current driver's active device binding
 - request foreground location permission
 - publish GPS payloads to `gps/{vehicle_id}` every 10 seconds through MQTT over WebSocket
-- display current vehicle, upload status, latest publish time, and latest error
+- display current tracking binding, upload status, latest publish time, and latest error
 
 Background tracking and offline queues are intentionally out of scope for this
 phase.
